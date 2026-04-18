@@ -8,9 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.verticalScroll
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -105,6 +104,12 @@ internal data class RecordEditorUiState(
     val validationErrors: List<String> = emptyList(),
 )
 
+private data class RecordEditorIntermediateState(
+    val record: CoffeeRecord?,
+    val beans: List<BeanProfile>,
+    val grinders: List<GrinderProfile>,
+)
+
 internal sealed interface RecordEditorEvent {
     data class Completed(val recordId: Long) : RecordEditorEvent
 }
@@ -135,22 +140,36 @@ class RecordEditorViewModel @Inject constructor(
                 requestedRecordId > 0L -> requestedRecordId
                 else -> recordRepository.getOrCreateActiveDraftId(settings.autoRestoreDraft)
             }
-            combine(
-                recordRepository.observeRecord(resolvedRecordId),
-                catalogRepository.observeBeanProfiles(),
-                catalogRepository.observeGrinderProfiles(),
-                catalogRepository.observeFlavorTags(),
-            ) { record, beans, grinders, tags ->
+            recordRepository.observeRecord(resolvedRecordId)
+                .combine(catalogRepository.observeBeanProfiles()) { record, beans ->
+                    record to beans
+                }
+                .combine(catalogRepository.observeGrinderProfiles()) { recordAndBeans, grinders ->
+                    RecordEditorIntermediateState(
+                        record = recordAndBeans.first,
+                        beans = recordAndBeans.second,
+                        grinders = grinders,
+                    )
+                }
+                .combine(catalogRepository.observeFlavorTags()) { intermediate, tags ->
                 val current = uiStateInternal.value
                 RecordEditorUiState(
                     isLoading = false,
                     recordId = resolvedRecordId,
-                    record = record,
+                    record = intermediate.record,
                     step = current.step,
-                    objective = if (!initialBindingDone && record != null) record.toObjectiveForm() else current.objective,
-                    subjective = if (!initialBindingDone && record != null) record.toSubjectiveForm() else current.subjective,
-                    beans = beans,
-                    grinders = grinders,
+                    objective = if (!initialBindingDone && intermediate.record != null) {
+                        intermediate.record.toObjectiveForm()
+                    } else {
+                        current.objective
+                    },
+                    subjective = if (!initialBindingDone && intermediate.record != null) {
+                        intermediate.record.toSubjectiveForm()
+                    } else {
+                        current.subjective
+                    },
+                    beans = intermediate.beans,
+                    grinders = intermediate.grinders,
                     flavorTags = tags,
                     validationErrors = current.validationErrors,
                 )
@@ -573,16 +592,14 @@ private fun SubjectiveStep(
                 uiState.flavorTags.firstOrNull { it.name == name }?.let(onToggleTag)
             },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = customTag,
-                onValueChange = onCustomTagChange,
-                label = { Text("Custom flavor tag") },
-                modifier = Modifier.weight(1f),
-            )
-            Button(onClick = onAddCustomTag) {
-                Text("Add")
-            }
+        OutlinedTextField(
+            value = customTag,
+            onValueChange = onCustomTagChange,
+            label = { Text("Custom flavor tag") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(onClick = onAddCustomTag) {
+            Text("Add")
         }
         OutlinedTextField(
             value = uiState.subjective.notes,
@@ -602,16 +619,16 @@ private fun ConfirmStep(
 ) {
     SectionCard(title = "Confirm submission") {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LabeledValue(label = "Method", value = objective.brewMethod?.displayName.orEmpty(), modifier = Modifier.weight(1f))
-            LabeledValue(label = "Bean", value = record?.beanNameSnapshot.orEmpty(), modifier = Modifier.weight(1f))
+            LabeledValue(label = "Method", value = objective.brewMethod?.displayName.orEmpty())
+            LabeledValue(label = "Bean", value = record?.beanNameSnapshot.orEmpty())
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LabeledValue(label = "Dose", value = "${objective.coffeeDoseG} g", modifier = Modifier.weight(1f))
-            LabeledValue(label = "Brew water", value = "${objective.brewWaterMl} ml", modifier = Modifier.weight(1f))
+            LabeledValue(label = "Dose", value = "${objective.coffeeDoseG} g")
+            LabeledValue(label = "Brew water", value = "${objective.brewWaterMl} ml")
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LabeledValue(label = "Bypass", value = "${objective.bypassWaterMl} ml", modifier = Modifier.weight(1f))
-            LabeledValue(label = "Water temp", value = "${objective.waterTempC} C", modifier = Modifier.weight(1f))
+            LabeledValue(label = "Bypass", value = "${objective.bypassWaterMl} ml")
+            LabeledValue(label = "Water temp", value = "${objective.waterTempC} C")
         }
         LabeledValue(label = "Overall subjective", value = subjective.overall?.let { "$it / 10" }.orEmpty())
         if (validationErrors.isNotEmpty()) {

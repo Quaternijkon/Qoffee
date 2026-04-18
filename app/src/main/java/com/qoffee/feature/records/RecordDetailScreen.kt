@@ -7,11 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -112,20 +111,20 @@ private fun RecordDetailScreen(
 
         SectionCard(title = "Objective details") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Method", value = record.brewMethod?.displayName.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "Bean", value = record.beanNameSnapshot.orEmpty(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "Method", value = record.brewMethod?.displayName.orEmpty())
+                LabeledValue(label = "Bean", value = record.beanNameSnapshot.orEmpty())
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Grinder", value = record.grinderNameSnapshot.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "Grind", value = record.grindSetting?.toString().orEmpty(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "Grinder", value = record.grinderNameSnapshot.orEmpty())
+                LabeledValue(label = "Grind", value = record.grindSetting?.toString().orEmpty())
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Dose", value = "${record.coffeeDoseG ?: ""} g", modifier = Modifier.weight(1f))
-                LabeledValue(label = "Brew water", value = "${record.brewWaterMl ?: ""} ml", modifier = Modifier.weight(1f))
+                LabeledValue(label = "Dose", value = "${record.coffeeDoseG ?: ""} g")
+                LabeledValue(label = "Brew water", value = "${record.brewWaterMl ?: ""} ml")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Bypass", value = "${record.bypassWaterMl ?: ""} ml", modifier = Modifier.weight(1f))
-                LabeledValue(label = "Water temp", value = "${record.waterTempC ?: ""} C", modifier = Modifier.weight(1f))
+                LabeledValue(label = "Bypass", value = "${record.bypassWaterMl ?: ""} ml")
+                LabeledValue(label = "Water temp", value = "${record.waterTempC ?: ""} C")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 record.totalWaterMl?.let { StatChip(text = "Total ${it}ml") }
@@ -146,14 +145,14 @@ private fun RecordDetailScreen(
             } else {
                 val evaluation = record.subjectiveEvaluation
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LabeledValue(label = "Aroma", value = evaluation.aroma?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "Acidity", value = evaluation.acidity?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "Sweetness", value = evaluation.sweetness?.toString().orEmpty(), modifier = Modifier.weight(1f))
+                    LabeledValue(label = "Aroma", value = evaluation.aroma?.toString().orEmpty())
+                    LabeledValue(label = "Acidity", value = evaluation.acidity?.toString().orEmpty())
+                    LabeledValue(label = "Sweetness", value = evaluation.sweetness?.toString().orEmpty())
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LabeledValue(label = "Bitterness", value = evaluation.bitterness?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "Body", value = evaluation.body?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "Aftertaste", value = evaluation.aftertaste?.toString().orEmpty(), modifier = Modifier.weight(1f))
+                    LabeledValue(label = "Bitterness", value = evaluation.bitterness?.toString().orEmpty())
+                    LabeledValue(label = "Body", value = evaluation.body?.toString().orEmpty())
+                    LabeledValue(label = "Aftertaste", value = evaluation.aftertaste?.toString().orEmpty())
                 }
                 LabeledValue(label = "Overall", value = evaluation.overall?.let { "$it / 10" }.orEmpty())
                 if (evaluation.flavorTags.isNotEmpty()) {

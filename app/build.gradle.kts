@@ -1,12 +1,14 @@
+import com.android.build.api.dsl.ApplicationExtension
+import org.gradle.kotlin.dsl.configure
+
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.kapt)
+    id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
 }
 
-android {
+extensions.configure<ApplicationExtension>("android") {
     namespace = "com.qoffee"
     compileSdk = 36
 
@@ -55,21 +57,16 @@ android {
     }
 
     sourceSets {
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        named("androidTest") {
+            assets.directories.add("$projectDir/schemas")
+        }
     }
 }
 
-kotlin {
-    jvmToolchain(17)
-}
-
-kapt {
-    correctErrorTypes = true
-    arguments {
-        arg("room.schemaLocation", "$projectDir/schemas")
-        arg("room.incremental", "true")
-        arg("room.expandProjection", "true")
-    }
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.incremental", "true")
+    arg("room.expandProjection", "true")
 }
 
 dependencies {
@@ -93,11 +90,12 @@ dependencies {
     implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.compose.adaptive)
     implementation(libs.androidx.compose.adaptive.layout)
+    implementation(libs.google.material)
     implementation(libs.google.hilt.android)
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
 
-    kapt(libs.androidx.room.compiler)
-    kapt(libs.google.hilt.compiler)
+    add("ksp", libs.androidx.room.compiler)
+    add("ksp", libs.google.hilt.compiler)
 
     testImplementation(libs.junit4)
     testImplementation(libs.google.truth)
@@ -108,7 +106,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.google.hilt.testing)
     androidTestImplementation(libs.androidx.room.testing)
-    kaptAndroidTest(libs.google.hilt.compiler)
+    add("kspAndroidTest", libs.google.hilt.compiler)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.verticalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,6 +45,7 @@ import com.qoffee.ui.components.StatChip
 import com.qoffee.ui.components.SubjectiveRadarLikeBars
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +62,21 @@ data class AnalyticsUiState(
     val grinders: List<GrinderProfile> = emptyList(),
     val selectedParameter: NumericParameter = NumericParameter.WATER_TEMP,
     val settings: UserSettings = UserSettings(),
+)
+
+private data class AnalyticsBaseState(
+    val filter: AnalysisFilter,
+    val dashboard: AnalyticsDashboard,
+    val beans: List<BeanProfile>,
+    val grinders: List<GrinderProfile>,
+    val settings: UserSettings,
+)
+
+private data class AnalyticsIntermediateState(
+    val filter: AnalysisFilter,
+    val dashboard: AnalyticsDashboard,
+    val beans: List<BeanProfile>,
+    val grinders: List<GrinderProfile>,
 )
 
 @HiltViewModel
@@ -81,26 +97,39 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private val settingsFlow = preferenceRepository.observeSettings()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     private val dashboardFlow = filter.flatMapLatest { currentFilter ->
         analyticsRepository.observeDashboard(currentFilter)
     }
 
-    val uiState: StateFlow<AnalyticsUiState> = combine(
-        filter,
-        dashboardFlow,
-        catalogRepository.observeBeanProfiles(),
-        catalogRepository.observeGrinderProfiles(),
-        settingsFlow,
-        selectedParameter,
-    ) { currentFilter, dashboard, beans, grinders, settings, parameter ->
-        AnalyticsUiState(
-            filter = currentFilter,
-            dashboard = dashboard,
-            beans = beans,
-            grinders = grinders,
-            selectedParameter = parameter,
-            settings = settings,
-        )
+    private val baseStateFlow = filter
+        .combine(dashboardFlow) { currentFilter, dashboard ->
+            currentFilter to dashboard
+        }
+        .combine(catalogRepository.observeBeanProfiles()) { filterAndDashboard, beans ->
+            Triple(filterAndDashboard.first, filterAndDashboard.second, beans)
+        }
+        .combine(catalogRepository.observeGrinderProfiles()) { filterDashboardAndBeans, grinders ->
+            AnalyticsIntermediateState(
+                filter = filterDashboardAndBeans.first,
+                dashboard = filterDashboardAndBeans.second,
+                beans = filterDashboardAndBeans.third,
+                grinders = grinders,
+            )
+        }
+        .combine(settingsFlow) { intermediate, settings ->
+            AnalyticsBaseState(
+                filter = intermediate.filter,
+                dashboard = intermediate.dashboard,
+                beans = intermediate.beans,
+                grinders = intermediate.grinders,
+                settings = settings,
+            )
+        }
+
+    val uiState: StateFlow<AnalyticsUiState> = baseStateFlow.combine(selectedParameter) { baseState, parameter ->
+        buildAnalyticsUiState(baseState, parameter)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -133,9 +162,10 @@ class AnalyticsViewModel @Inject constructor(
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun AnalyticsRoute(
     paddingValues: PaddingValues,
-    _onOpenRecord: (Long) -> Unit,
+    onOpenRecord: (Long) -> Unit,
     viewModel: AnalyticsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -148,6 +178,20 @@ fun AnalyticsRoute(
         onRoastLevelChange = viewModel::updateRoastLevel,
         onGrinderChange = viewModel::updateGrinder,
         onParameterChange = viewModel::updateSelectedParameter,
+    )
+}
+
+private fun buildAnalyticsUiState(
+    baseState: AnalyticsBaseState,
+    parameter: NumericParameter,
+): AnalyticsUiState {
+    return AnalyticsUiState(
+        filter = baseState.filter,
+        dashboard = baseState.dashboard,
+        beans = baseState.beans,
+        grinders = baseState.grinders,
+        selectedParameter = parameter,
+        settings = baseState.settings,
     )
 }
 

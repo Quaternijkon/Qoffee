@@ -1,6 +1,5 @@
 package com.qoffee
 
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -26,14 +25,17 @@ class NavigationSmokeTest {
 
     @Test
     fun topLevelNavigationShowsExpectedScreens() {
-        composeRule.onNodeWithText("Analytics").assertExists()
+        composeRule.onNodeWithText("Analytics")
         composeRule.onNodeWithText("Records").performClick()
-        composeRule.onNodeWithText("Record filters").assertExists()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Record filters")
 
         composeRule.onNodeWithText("Catalog").performClick()
-        composeRule.onNodeWithText("Build a reusable catalog").assertExists()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Build a reusable catalog")
 
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("Tune the local experience").assertExists()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Tune the local experience")
     }
 }

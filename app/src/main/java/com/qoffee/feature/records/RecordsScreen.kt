@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -44,6 +44,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +59,12 @@ data class RecordsUiState(
     val grinders: List<GrinderProfile> = emptyList(),
 )
 
+private data class RecordsIntermediateState(
+    val filter: AnalysisFilter,
+    val records: List<CoffeeRecord>,
+    val beans: List<BeanProfile>,
+)
+
 @HiltViewModel
 class RecordsViewModel @Inject constructor(
     recordRepository: RecordRepository,
@@ -66,19 +73,31 @@ class RecordsViewModel @Inject constructor(
 
     private val filter = MutableStateFlow(AnalysisFilter(timeRange = AnalysisTimeRange.ALL))
 
-    val uiState: StateFlow<RecordsUiState> = combine(
-        filter,
-        filter.flatMapLatest { current -> recordRepository.observeRecords(current) },
-        catalogRepository.observeBeanProfiles(),
-        catalogRepository.observeGrinderProfiles(),
-    ) { currentFilter, records, beans, grinders ->
-        RecordsUiState(
-            filter = currentFilter,
-            records = records,
-            beans = beans,
-            grinders = grinders,
-        )
-    }.stateIn(
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val recordsFlow = filter.flatMapLatest { current ->
+        recordRepository.observeRecords(current)
+    }
+
+    val uiState: StateFlow<RecordsUiState> = filter
+        .combine(recordsFlow) { currentFilter, records ->
+            currentFilter to records
+        }
+        .combine(catalogRepository.observeBeanProfiles()) { filterAndRecords, beans ->
+            RecordsIntermediateState(
+                filter = filterAndRecords.first,
+                records = filterAndRecords.second,
+                beans = beans,
+            )
+        }
+        .combine(catalogRepository.observeGrinderProfiles()) { intermediate, grinders ->
+            RecordsUiState(
+                filter = intermediate.filter,
+                records = intermediate.records,
+                beans = intermediate.beans,
+                grinders = grinders,
+            )
+        }
+        .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = RecordsUiState(),
