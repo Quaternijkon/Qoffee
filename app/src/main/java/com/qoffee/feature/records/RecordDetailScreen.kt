@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +16,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -60,12 +60,14 @@ fun RecordDetailRoute(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onDuplicate: (Long) -> Unit,
+    isReadOnlyArchive: Boolean,
     viewModel: RecordDetailViewModel = hiltViewModel(),
 ) {
     val record by viewModel.record.collectAsStateWithLifecycle()
     RecordDetailScreen(
         paddingValues = paddingValues,
         record = record,
+        isReadOnlyArchive = isReadOnlyArchive,
         onBack = onBack,
         onEdit = onEdit,
         onDuplicate = onDuplicate,
@@ -76,20 +78,21 @@ fun RecordDetailRoute(
 private fun RecordDetailScreen(
     paddingValues: PaddingValues,
     record: CoffeeRecord?,
+    isReadOnlyArchive: Boolean,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onDuplicate: (Long) -> Unit,
 ) {
     if (record == null) {
         EmptyStateCard(
-            title = "Record not found",
-            subtitle = "The record is missing or still loading.",
+            title = "未找到这条记录",
+            subtitle = "这条记录可能还在加载，或者已经不存在了。",
             modifier = Modifier.padding(paddingValues),
         )
         return
     }
 
-    val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
+    val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -100,61 +103,66 @@ private fun RecordDetailScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroCard(
-            title = record.beanNameSnapshot ?: (record.brewMethod?.displayName ?: "Coffee record"),
-            subtitle = "${record.brewMethod?.displayName ?: "Unknown method"} | ${formatter.format(Date(record.brewedAt))}",
+            title = record.beanNameSnapshot ?: (record.brewMethod?.displayName ?: "咖啡记录"),
+            subtitle = "${record.brewMethod?.displayName ?: "未指定方式"} | ${formatter.format(Date(record.brewedAt))}",
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack) { Text("Back") }
-            Button(onClick = { onEdit(record.id) }) { Text("Edit") }
-            OutlinedButton(onClick = { onDuplicate(record.id) }) { Text("Duplicate") }
+            OutlinedButton(onClick = onBack) { Text("返回") }
+            if (!isReadOnlyArchive) {
+                Button(onClick = { onEdit(record.id) }) { Text("编辑") }
+                OutlinedButton(onClick = { onDuplicate(record.id) }) { Text("复制") }
+            }
         }
 
-        SectionCard(title = "Objective details") {
+        SectionCard(title = "客观参数") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Method", value = record.brewMethod?.displayName.orEmpty())
-                LabeledValue(label = "Bean", value = record.beanNameSnapshot.orEmpty())
+                LabeledValue(label = "制作方式", value = record.brewMethod?.displayName.orEmpty())
+                LabeledValue(label = "咖啡豆", value = record.beanNameSnapshot.orEmpty())
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Grinder", value = record.grinderNameSnapshot.orEmpty())
-                LabeledValue(label = "Grind", value = record.grindSetting?.toString().orEmpty())
+                LabeledValue(label = "磨豆机", value = record.grinderNameSnapshot.orEmpty())
+                LabeledValue(label = "研磨格数", value = record.grindSetting?.toString().orEmpty())
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Dose", value = "${record.coffeeDoseG ?: ""} g")
-                LabeledValue(label = "Brew water", value = "${record.brewWaterMl ?: ""} ml")
+                LabeledValue(label = "粉量", value = "${record.coffeeDoseG ?: ""} g")
+                LabeledValue(label = "冲煮水量", value = "${record.brewWaterMl ?: ""} ml")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "Bypass", value = "${record.bypassWaterMl ?: ""} ml")
-                LabeledValue(label = "Water temp", value = "${record.waterTempC ?: ""} C")
+                LabeledValue(label = "旁路水量", value = "${record.bypassWaterMl ?: ""} ml")
+                LabeledValue(label = "水温", value = "${record.waterTempC ?: ""} °C")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                record.totalWaterMl?.let { StatChip(text = "Total ${it}ml") }
-                record.brewRatio?.let { StatChip(text = "Ratio ${"%.1f".format(it)}") }
+                record.totalWaterMl?.let { StatChip(text = "总水量 ${it} ml") }
+                record.brewRatio?.let { StatChip(text = "粉水比 ${"%.1f".format(it)}") }
                 record.beanRoastLevelSnapshot?.let { StatChip(text = it.displayName) }
             }
             if (record.notes.isNotBlank()) {
-                Text(text = record.notes, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = record.notes,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
         }
 
-        SectionCard(title = "Subjective details") {
+        SectionCard(title = "主观感受") {
             if (record.subjectiveEvaluation == null || record.subjectiveEvaluation.isEmpty()) {
                 Text(
-                    text = "This record does not have subjective notes yet.",
+                    text = "这条记录还没有填写主观感受。",
                     style = MaterialTheme.typography.bodyLarge,
                 )
             } else {
                 val evaluation = record.subjectiveEvaluation
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LabeledValue(label = "Aroma", value = evaluation.aroma?.toString().orEmpty())
-                    LabeledValue(label = "Acidity", value = evaluation.acidity?.toString().orEmpty())
-                    LabeledValue(label = "Sweetness", value = evaluation.sweetness?.toString().orEmpty())
+                    LabeledValue(label = "香气", value = evaluation.aroma?.toString().orEmpty())
+                    LabeledValue(label = "酸质", value = evaluation.acidity?.toString().orEmpty())
+                    LabeledValue(label = "甜感", value = evaluation.sweetness?.toString().orEmpty())
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LabeledValue(label = "Bitterness", value = evaluation.bitterness?.toString().orEmpty())
-                    LabeledValue(label = "Body", value = evaluation.body?.toString().orEmpty())
-                    LabeledValue(label = "Aftertaste", value = evaluation.aftertaste?.toString().orEmpty())
+                    LabeledValue(label = "苦感", value = evaluation.bitterness?.toString().orEmpty())
+                    LabeledValue(label = "醇厚", value = evaluation.body?.toString().orEmpty())
+                    LabeledValue(label = "余韵", value = evaluation.aftertaste?.toString().orEmpty())
                 }
-                LabeledValue(label = "Overall", value = evaluation.overall?.let { "$it / 10" }.orEmpty())
+                LabeledValue(label = "总体评分", value = evaluation.overall?.let { "$it / 10" }.orEmpty())
                 if (evaluation.flavorTags.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         evaluation.flavorTags.forEach { tag ->
@@ -163,7 +171,10 @@ private fun RecordDetailScreen(
                     }
                 }
                 if (evaluation.notes.isNotBlank()) {
-                    Text(text = evaluation.notes, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = evaluation.notes,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
                 }
             }
         }

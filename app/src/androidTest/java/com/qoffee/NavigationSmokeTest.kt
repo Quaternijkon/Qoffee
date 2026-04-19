@@ -25,17 +25,17 @@ class NavigationSmokeTest {
 
     @Test
     fun topLevelNavigationShowsExpectedScreens() {
-        composeRule.onNodeWithText("Analytics")
-        composeRule.onNodeWithText("Records").performClick()
+        composeRule.onNodeWithText("分析")
+        composeRule.onNodeWithText("记录").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Record filters")
+        composeRule.onNodeWithText("记录筛选")
 
-        composeRule.onNodeWithText("Catalog").performClick()
+        composeRule.onNodeWithText("资料库").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Build a reusable catalog")
+        composeRule.onNodeWithText("维护你的资料库")
 
-        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("设置").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Tune the local experience")
+        composeRule.onNodeWithText("调整本地使用体验")
     }
 }

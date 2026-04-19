@@ -9,16 +9,19 @@ import androidx.room.Room
 import com.qoffee.core.common.SystemTimeProvider
 import com.qoffee.core.common.TimeProvider
 import com.qoffee.data.local.BeanProfileDao
+import com.qoffee.data.local.ArchiveDao
 import com.qoffee.data.local.BrewRecordDao
 import com.qoffee.data.local.FlavorTagDao
 import com.qoffee.data.local.GrinderProfileDao
 import com.qoffee.data.local.QoffeeDatabase
 import com.qoffee.data.local.RecordFlavorTagDao
 import com.qoffee.data.local.SubjectiveEvaluationDao
+import com.qoffee.data.repository.ArchiveRepositoryImpl
 import com.qoffee.data.repository.AnalyticsRepositoryImpl
 import com.qoffee.data.repository.CatalogRepositoryImpl
 import com.qoffee.data.repository.PreferenceRepositoryImpl
 import com.qoffee.data.repository.RecordRepositoryImpl
+import com.qoffee.domain.repository.ArchiveRepository
 import com.qoffee.domain.repository.AnalyticsRepository
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.PreferenceRepository
@@ -42,8 +45,11 @@ object DatabaseModule {
             context,
             QoffeeDatabase::class.java,
             "qoffee.db",
-        ).fallbackToDestructiveMigration().build()
+        ).fallbackToDestructiveMigration(false).build()
     }
+
+    @Provides
+    fun provideArchiveDao(database: QoffeeDatabase): ArchiveDao = database.archiveDao()
 
     @Provides
     fun provideBeanProfileDao(database: QoffeeDatabase): BeanProfileDao = database.beanProfileDao()
@@ -84,6 +90,10 @@ abstract class BindingsModule {
     @Binds
     @Singleton
     abstract fun bindTimeProvider(impl: SystemTimeProvider): TimeProvider
+
+    @Binds
+    @Singleton
+    abstract fun bindArchiveRepository(impl: ArchiveRepositoryImpl): ArchiveRepository
 
     @Binds
     @Singleton

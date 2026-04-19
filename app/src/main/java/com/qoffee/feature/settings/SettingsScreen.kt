@@ -97,26 +97,26 @@ private fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroCard(
-            title = "Tune the local experience",
-            subtitle = "These settings are stored on device and only affect offline use.",
+            title = "调整本地使用体验",
+            subtitle = "这些设置只保存在你的设备上，用来让记录和分析流程更顺手。",
         )
-        SectionCard(title = "Record settings") {
+        SectionCard(title = "记录设置") {
             SettingToggle(
-                title = "Auto restore active draft",
-                subtitle = "When you open the editor again, continue the unfinished draft first.",
+                title = "自动恢复活动草稿",
+                subtitle = "再次打开记录编辑页时，优先接着填写未完成的草稿。",
                 checked = settings.autoRestoreDraft,
                 onCheckedChange = onAutoRestoreChange,
             )
         }
-        SectionCard(title = "Analysis settings") {
+        SectionCard(title = "分析设置") {
             SettingToggle(
-                title = "Show insight confidence",
-                subtitle = "Display confidence strength alongside insight cards.",
+                title = "显示洞察置信度",
+                subtitle = "在洞察卡片中显示置信度，帮助判断结论可靠性。",
                 checked = settings.showInsightConfidence,
                 onCheckedChange = onShowConfidenceChange,
             )
             DropdownField(
-                label = "Default analysis range",
+                label = "默认分析时间范围",
                 selectedLabel = settings.defaultAnalysisTimeRange.displayName,
                 options = AnalysisTimeRange.entries.map { DropdownOption(it.displayName, it) },
                 onSelected = { selected -> selected?.let(onDefaultRangeChange) },
@@ -124,7 +124,7 @@ private fun SettingsScreen(
             )
         }
         Text(
-            text = "Qoffee v1 stores data locally with Room and DataStore. No account or upload is enabled.",
+            text = "Qoffee v1 目前只做本地存储，不需要账号，也不会上传记录。",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

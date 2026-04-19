@@ -3,6 +3,8 @@ package com.qoffee.domain.repository
 import com.qoffee.core.model.AnalyticsDashboard
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
+import com.qoffee.core.model.ArchiveSeedStatus
+import com.qoffee.core.model.ArchiveSummary
 import com.qoffee.core.model.BeanProfile
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.FlavorTag
@@ -12,6 +14,20 @@ import com.qoffee.core.model.RecordValidationResult
 import com.qoffee.core.model.SubjectiveEvaluation
 import com.qoffee.core.model.UserSettings
 import kotlinx.coroutines.flow.Flow
+
+interface ArchiveRepository {
+    fun observeArchives(): Flow<List<ArchiveSummary>>
+    fun observeCurrentArchive(): Flow<ArchiveSummary?>
+    suspend fun getCurrentArchiveId(): Long?
+    suspend fun switchArchive(id: Long)
+    suspend fun createArchive(name: String): Long
+    suspend fun duplicateArchive(sourceArchiveId: Long, newName: String, switchToNew: Boolean = true): Long
+    suspend fun renameArchive(id: Long, newName: String)
+    suspend fun deleteArchive(id: Long)
+    suspend fun copyDemoArchiveAsEditable(name: String): Long
+    suspend fun resetDemoArchive(): Long
+    suspend fun seedDemoArchiveIfNeeded(): ArchiveSeedStatus
+}
 
 interface CatalogRepository {
     fun observeBeanProfiles(): Flow<List<BeanProfile>>

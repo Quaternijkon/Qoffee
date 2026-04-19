@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,12 +23,14 @@ import androidx.lifecycle.viewModelScope
 import com.qoffee.core.model.AnalyticsDashboard
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
+import com.qoffee.core.model.BeanProcessMethod
 import com.qoffee.core.model.BeanProfile
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.InsightCard
 import com.qoffee.core.model.NumericParameter
 import com.qoffee.core.model.RoastLevel
+import com.qoffee.core.model.SuggestedNextStep
 import com.qoffee.core.model.UserSettings
 import com.qoffee.domain.repository.AnalyticsRepository
 import com.qoffee.domain.repository.CatalogRepository
@@ -128,13 +130,22 @@ class AnalyticsViewModel @Inject constructor(
             )
         }
 
-    val uiState: StateFlow<AnalyticsUiState> = baseStateFlow.combine(selectedParameter) { baseState, parameter ->
-        buildAnalyticsUiState(baseState, parameter)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = AnalyticsUiState(),
-    )
+    val uiState: StateFlow<AnalyticsUiState> = baseStateFlow
+        .combine(selectedParameter) { baseState, parameter ->
+            AnalyticsUiState(
+                filter = baseState.filter,
+                dashboard = baseState.dashboard,
+                beans = baseState.beans,
+                grinders = baseState.grinders,
+                selectedParameter = parameter,
+                settings = baseState.settings,
+            )
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = AnalyticsUiState(),
+        )
 
     fun updateTimeRange(range: AnalysisTimeRange) {
         filter.value = filter.value.copy(timeRange = range)
@@ -150,6 +161,10 @@ class AnalyticsViewModel @Inject constructor(
 
     fun updateRoastLevel(roastLevel: RoastLevel?) {
         filter.value = filter.value.copy(roastLevel = roastLevel)
+    }
+
+    fun updateProcessMethod(processMethod: BeanProcessMethod?) {
+        filter.value = filter.value.copy(processMethod = processMethod)
     }
 
     fun updateGrinder(grinderId: Long?) {
@@ -176,22 +191,9 @@ fun AnalyticsRoute(
         onMethodChange = viewModel::updateBrewMethod,
         onBeanChange = viewModel::updateBean,
         onRoastLevelChange = viewModel::updateRoastLevel,
+        onProcessMethodChange = viewModel::updateProcessMethod,
         onGrinderChange = viewModel::updateGrinder,
         onParameterChange = viewModel::updateSelectedParameter,
-    )
-}
-
-private fun buildAnalyticsUiState(
-    baseState: AnalyticsBaseState,
-    parameter: NumericParameter,
-): AnalyticsUiState {
-    return AnalyticsUiState(
-        filter = baseState.filter,
-        dashboard = baseState.dashboard,
-        beans = baseState.beans,
-        grinders = baseState.grinders,
-        selectedParameter = parameter,
-        settings = baseState.settings,
     )
 }
 
@@ -203,6 +205,7 @@ private fun AnalyticsScreen(
     onMethodChange: (BrewMethod?) -> Unit,
     onBeanChange: (Long?) -> Unit,
     onRoastLevelChange: (RoastLevel?) -> Unit,
+    onProcessMethodChange: (BeanProcessMethod?) -> Unit,
     onGrinderChange: (Long?) -> Unit,
     onParameterChange: (NumericParameter) -> Unit,
 ) {
@@ -216,40 +219,75 @@ private fun AnalyticsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroCard(
-            title = "Turn logs into review sessions",
-            subtitle = "Qoffee compares your parameters with subjective scores and surfaces simple local insights.",
+            title = "把记录变成复盘",
+            subtitle = "Qoffee 会对比参数和主观评分，帮你在本地找到更清晰的规律。",
         )
 
-        FilterSection(
-            filter = uiState.filter,
-            beans = uiState.beans,
-            grinders = uiState.grinders,
-            onTimeRangeChange = onTimeRangeChange,
-            onMethodChange = onMethodChange,
-            onBeanChange = onBeanChange,
-            onRoastLevelChange = onRoastLevelChange,
-            onGrinderChange = onGrinderChange,
-        )
+        SectionCard(title = "筛选条件") {
+            DropdownField(
+                label = "时间范围",
+                selectedLabel = uiState.filter.timeRange.displayName,
+                options = AnalysisTimeRange.entries.map { DropdownOption(it.displayName, it) },
+                onSelected = { selected -> selected?.let(onTimeRangeChange) },
+                allowClear = false,
+            )
+            DropdownField(
+                label = "制作方式",
+                selectedLabel = uiState.filter.brewMethod?.displayName,
+                options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
+                onSelected = onMethodChange,
+            )
+            DropdownField(
+                label = "咖啡豆",
+                selectedLabel = uiState.beans.firstOrNull { it.id == uiState.filter.beanId }?.name,
+                options = uiState.beans.map { DropdownOption(it.name, it.id) },
+                onSelected = onBeanChange,
+            )
+            DropdownField(
+                label = "烘焙度",
+                selectedLabel = uiState.filter.roastLevel?.displayName,
+                options = RoastLevel.entries.map { DropdownOption(it.displayName, it) },
+                onSelected = onRoastLevelChange,
+            )
+            DropdownField(
+                label = "处理法",
+                selectedLabel = uiState.filter.processMethod?.displayName,
+                options = BeanProcessMethod.entries.map { DropdownOption(it.displayName, it) },
+                onSelected = onProcessMethodChange,
+            )
+            DropdownField(
+                label = "磨豆机",
+                selectedLabel = uiState.grinders.firstOrNull { it.id == uiState.filter.grinderId }?.name,
+                options = uiState.grinders.map { DropdownOption(it.name, it.id) },
+                onSelected = onGrinderChange,
+            )
+        }
 
         if (!uiState.dashboard.hasEnoughData) {
             EmptyStateCard(
-                title = "Not enough rated samples yet",
-                subtitle = "Complete a few records with both objective parameters and subjective scores first.",
+                title = "可分析样本还不够",
+                subtitle = "先完成几条同时包含客观参数和主观评分的记录，再来看分析会更有帮助。",
             )
             return@Column
         }
 
-        SectionCard(title = "Overview") {
+        SectionCard(title = "摘要") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatChip(text = "Samples ${uiState.dashboard.sampleCount}")
-                StatChip(text = uiState.filter.timeRange.displayName)
+                StatChip(text = "样本 ${uiState.dashboard.summary.sampleCount}")
+                StatChip(text = "豆子 ${uiState.dashboard.summary.beanCount}")
+                StatChip(text = "磨豆机 ${uiState.dashboard.summary.grinderCount}")
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatChip(text = "方式 ${uiState.dashboard.summary.methodCount}")
+                uiState.dashboard.summary.firstRecordAt?.let { StatChip(text = "开始于 ${formatDate(it)}") }
+                uiState.dashboard.summary.lastRecordAt?.let { StatChip(text = "更新于 ${formatDate(it)}") }
             }
         }
 
-        SectionCard(title = "Insights") {
+        SectionCard(title = "关键洞察") {
             if (uiState.dashboard.insightCards.isEmpty()) {
                 Text(
-                    text = "The current filter does not yet meet the automatic insight threshold.",
+                    text = "当前筛选结果还没有达到自动洞察阈值，继续记录后会看到更完整的分析。",
                     style = MaterialTheme.typography.bodyLarge,
                 )
             } else {
@@ -262,15 +300,15 @@ private fun AnalyticsScreen(
             }
         }
 
-        SectionCard(title = "Charts") {
-            Text(text = "Average overall score by brew method", style = MaterialTheme.typography.titleMedium)
+        SectionCard(title = "关系图谱") {
+            Text(text = "不同制作方式的平均总体评分", style = MaterialTheme.typography.titleMedium)
             MethodBarChart(values = uiState.dashboard.methodAverages)
 
-            Text(text = "Overall score trend", style = MaterialTheme.typography.titleMedium)
+            Text(text = "总体评分趋势", style = MaterialTheme.typography.titleMedium)
             ScoreTrendChart(points = uiState.dashboard.timelinePoints)
 
             DropdownField(
-                label = "Scatter parameter",
+                label = "散点图参数",
                 selectedLabel = uiState.selectedParameter.displayName,
                 options = NumericParameter.entries.map { DropdownOption(it.displayName, it) },
                 onSelected = { selected -> selected?.let(onParameterChange) },
@@ -281,55 +319,17 @@ private fun AnalyticsScreen(
                 xLabel = uiState.selectedParameter.displayName,
             )
 
-            Text(text = "Average subjective dimensions", style = MaterialTheme.typography.titleMedium)
+            Text(text = "主观维度均值", style = MaterialTheme.typography.titleMedium)
             SubjectiveRadarLikeBars(values = uiState.dashboard.dimensionAverages)
         }
-    }
-}
 
-@Composable
-private fun FilterSection(
-    filter: AnalysisFilter,
-    beans: List<BeanProfile>,
-    grinders: List<GrinderProfile>,
-    onTimeRangeChange: (AnalysisTimeRange) -> Unit,
-    onMethodChange: (BrewMethod?) -> Unit,
-    onBeanChange: (Long?) -> Unit,
-    onRoastLevelChange: (RoastLevel?) -> Unit,
-    onGrinderChange: (Long?) -> Unit,
-) {
-    SectionCard(title = "Filters") {
-        DropdownField(
-            label = "Time range",
-            selectedLabel = filter.timeRange.displayName,
-            options = AnalysisTimeRange.entries.map { DropdownOption(it.displayName, it) },
-            onSelected = { selected -> selected?.let(onTimeRangeChange) },
-            allowClear = false,
-        )
-        DropdownField(
-            label = "Brew method",
-            selectedLabel = filter.brewMethod?.displayName,
-            options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
-            onSelected = onMethodChange,
-        )
-        DropdownField(
-            label = "Bean",
-            selectedLabel = beans.firstOrNull { it.id == filter.beanId }?.name,
-            options = beans.map { DropdownOption(it.name, it.id) },
-            onSelected = onBeanChange,
-        )
-        DropdownField(
-            label = "Roast level",
-            selectedLabel = filter.roastLevel?.displayName,
-            options = RoastLevel.entries.map { DropdownOption(it.displayName, it) },
-            onSelected = onRoastLevelChange,
-        )
-        DropdownField(
-            label = "Grinder",
-            selectedLabel = grinders.firstOrNull { it.id == filter.grinderId }?.name,
-            options = grinders.map { DropdownOption(it.name, it.id) },
-            onSelected = onGrinderChange,
-        )
+        if (uiState.dashboard.suggestedNextSteps.isNotEmpty()) {
+            SectionCard(title = "下一杯实验建议") {
+                uiState.dashboard.suggestedNextSteps.forEach { step ->
+                    NextStepItem(step)
+                }
+            }
+        }
     }
 }
 
@@ -347,11 +347,32 @@ private fun InsightItem(
         Text(text = insight.title, style = MaterialTheme.typography.titleMedium)
         Text(text = insight.message, style = MaterialTheme.typography.bodyLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatChip(text = "n=${insight.sampleCount}")
+            StatChip(text = "样本 ${insight.sampleCount}")
             if (showConfidence) {
-                StatChip(text = "Confidence ${insight.confidence.displayName}")
+                StatChip(text = "置信度 ${insight.confidence.displayName}")
             }
             StatChip(text = insight.filterContext)
         }
     }
+}
+
+@Composable
+private fun NextStepItem(step: SuggestedNextStep) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(text = step.title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = step.message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun formatDate(timestampMillis: Long): String {
+    return java.text.SimpleDateFormat("M/d", java.util.Locale.CHINA).format(java.util.Date(timestampMillis))
 }

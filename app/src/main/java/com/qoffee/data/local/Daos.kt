@@ -9,9 +9,49 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+interface ArchiveDao {
+    @Query(
+        """
+        SELECT a.*,
+               (SELECT COUNT(*) FROM bean_profiles b WHERE b.archiveId = a.id) AS beanCount,
+               (SELECT COUNT(*) FROM grinder_profiles g WHERE g.archiveId = a.id) AS grinderCount,
+               (SELECT COUNT(*) FROM brew_records r WHERE r.archiveId = a.id AND r.status = 'completed') AS recordCount,
+               (SELECT MAX(r.brewedAt) FROM brew_records r WHERE r.archiveId = a.id) AS lastRecordAt
+        FROM archives a
+        ORDER BY a.sortOrder ASC, a.updatedAt DESC
+        """,
+    )
+    fun observeSummaries(): Flow<List<ArchiveSummaryRow>>
+
+    @Query("SELECT * FROM archives WHERE id = :id")
+    fun observeById(id: Long): Flow<ArchiveEntity?>
+
+    @Query("SELECT * FROM archives WHERE id = :id")
+    suspend fun getById(id: Long): ArchiveEntity?
+
+    @Query("SELECT * FROM archives WHERE typeCode = :typeCode LIMIT 1")
+    suspend fun findByType(typeCode: String): ArchiveEntity?
+
+    @Query("SELECT * FROM archives ORDER BY sortOrder ASC, updatedAt DESC")
+    suspend fun getAll(): List<ArchiveEntity>
+
+    @Insert
+    suspend fun insert(entity: ArchiveEntity): Long
+
+    @Update
+    suspend fun update(entity: ArchiveEntity)
+
+    @Query("DELETE FROM archives WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}
+
+@Dao
 interface BeanProfileDao {
-    @Query("SELECT * FROM bean_profiles ORDER BY createdAt DESC")
-    fun observeAll(): Flow<List<BeanProfileEntity>>
+    @Query("SELECT * FROM bean_profiles WHERE archiveId = :archiveId ORDER BY createdAt DESC")
+    fun observeByArchive(archiveId: Long): Flow<List<BeanProfileEntity>>
+
+    @Query("SELECT * FROM bean_profiles WHERE archiveId = :archiveId")
+    suspend fun getAllByArchive(archiveId: Long): List<BeanProfileEntity>
 
     @Query("SELECT * FROM bean_profiles WHERE id = :id")
     suspend fun getById(id: Long): BeanProfileEntity?
@@ -25,8 +65,11 @@ interface BeanProfileDao {
 
 @Dao
 interface GrinderProfileDao {
-    @Query("SELECT * FROM grinder_profiles ORDER BY createdAt DESC")
-    fun observeAll(): Flow<List<GrinderProfileEntity>>
+    @Query("SELECT * FROM grinder_profiles WHERE archiveId = :archiveId ORDER BY createdAt DESC")
+    fun observeByArchive(archiveId: Long): Flow<List<GrinderProfileEntity>>
+
+    @Query("SELECT * FROM grinder_profiles WHERE archiveId = :archiveId")
+    suspend fun getAllByArchive(archiveId: Long): List<GrinderProfileEntity>
 
     @Query("SELECT * FROM grinder_profiles WHERE id = :id")
     suspend fun getById(id: Long): GrinderProfileEntity?
@@ -44,12 +87,23 @@ interface BrewRecordDao {
     @Query(
         """
         SELECT * FROM brew_records
+        WHERE archiveId = :archiveId
         ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END ASC,
                  brewedAt DESC,
                  updatedAt DESC
         """,
     )
-    fun observeAll(): Flow<List<BrewRecordWithRelations>>
+    fun observeAll(archiveId: Long): Flow<List<BrewRecordWithRelations>>
+
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM brew_records
+        WHERE archiveId = :archiveId
+        ORDER BY brewedAt DESC, updatedAt DESC
+        """,
+    )
+    suspend fun getAllByArchive(archiveId: Long): List<BrewRecordWithRelations>
 
     @Transaction
     @Query("SELECT * FROM brew_records WHERE id = :id")
@@ -62,8 +116,8 @@ interface BrewRecordDao {
     @Query("SELECT * FROM brew_records WHERE id = :id")
     suspend fun getEntityById(id: Long): BrewRecordEntity?
 
-    @Query("SELECT * FROM brew_records WHERE status = 'draft' LIMIT 1")
-    suspend fun getActiveDraft(): BrewRecordEntity?
+    @Query("SELECT * FROM brew_records WHERE archiveId = :archiveId AND status = 'draft' LIMIT 1")
+    suspend fun getActiveDraft(archiveId: Long): BrewRecordEntity?
 
     @Insert
     suspend fun insert(entity: BrewRecordEntity): Long
@@ -71,8 +125,8 @@ interface BrewRecordDao {
     @Update
     suspend fun update(entity: BrewRecordEntity)
 
-    @Query("DELETE FROM brew_records WHERE status = 'draft'")
-    suspend fun deleteDrafts()
+    @Query("DELETE FROM brew_records WHERE archiveId = :archiveId AND status = 'draft'")
+    suspend fun deleteDrafts(archiveId: Long)
 }
 
 @Dao
@@ -86,14 +140,17 @@ interface SubjectiveEvaluationDao {
 
 @Dao
 interface FlavorTagDao {
-    @Query("SELECT * FROM flavor_tags ORDER BY isPreset DESC, name ASC")
-    fun observeAll(): Flow<List<FlavorTagEntity>>
+    @Query("SELECT * FROM flavor_tags WHERE archiveId = :archiveId ORDER BY isPreset DESC, name ASC")
+    fun observeAll(archiveId: Long): Flow<List<FlavorTagEntity>>
+
+    @Query("SELECT * FROM flavor_tags WHERE archiveId = :archiveId")
+    suspend fun getAllByArchive(archiveId: Long): List<FlavorTagEntity>
 
     @Query("SELECT * FROM flavor_tags WHERE id = :id")
     suspend fun getById(id: Long): FlavorTagEntity?
 
-    @Query("SELECT * FROM flavor_tags WHERE name = :name LIMIT 1")
-    suspend fun findByName(name: String): FlavorTagEntity?
+    @Query("SELECT * FROM flavor_tags WHERE archiveId = :archiveId AND name = :name LIMIT 1")
+    suspend fun findByName(archiveId: Long, name: String): FlavorTagEntity?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entity: FlavorTagEntity): Long

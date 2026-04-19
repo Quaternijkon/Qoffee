@@ -46,7 +46,7 @@ class RecordValidatorTest {
             minSetting = 10.0,
             maxSetting = 30.0,
             stepSize = 1.0,
-            unitLabel = "click",
+            unitLabel = "格",
         )
 
         val result = validator.validate(

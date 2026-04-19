@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [
+        ArchiveEntity::class,
         BeanProfileEntity::class,
         GrinderProfileEntity::class,
         BrewRecordEntity::class,
@@ -12,10 +13,11 @@ import androidx.room.RoomDatabase
         FlavorTagEntity::class,
         RecordFlavorTagCrossRef::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class QoffeeDatabase : RoomDatabase() {
+    abstract fun archiveDao(): ArchiveDao
     abstract fun beanProfileDao(): BeanProfileDao
     abstract fun grinderProfileDao(): GrinderProfileDao
     abstract fun brewRecordDao(): BrewRecordDao

@@ -1,5 +1,44 @@
 package com.qoffee.core.model
 
+enum class ArchiveType(
+    val code: String,
+    val displayName: String,
+) {
+    NORMAL("normal", "普通存档"),
+    DEMO("demo", "示范存档"),
+    ;
+
+    companion object {
+        fun fromCode(code: String?): ArchiveType = entries.firstOrNull { it.code == code } ?: NORMAL
+    }
+}
+
+data class Archive(
+    val id: Long = 0L,
+    val name: String,
+    val type: ArchiveType,
+    val isReadOnly: Boolean,
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+    val sortOrder: Int = 0,
+)
+
+data class ArchiveSummary(
+    val archive: Archive,
+    val beanCount: Int = 0,
+    val grinderCount: Int = 0,
+    val recordCount: Int = 0,
+    val lastRecordAt: Long? = null,
+) {
+    val isDemo: Boolean get() = archive.type == ArchiveType.DEMO
+}
+
+data class ArchiveSeedStatus(
+    val hasSeededDemoArchive: Boolean = false,
+    val demoArchiveId: Long? = null,
+    val currentArchiveId: Long? = null,
+)
+
 enum class BrewMethod(
     val code: String,
     val displayName: String,
@@ -7,10 +46,10 @@ enum class BrewMethod(
 ) {
     ESPRESSO_MACHINE("espresso_machine", "意式咖啡机", true),
     MOKA_POT("moka_pot", "摩卡壶", true),
-    POUR_OVER("pour_over", "手冲壶", true),
+    POUR_OVER("pour_over", "手冲", true),
     CLEVER_DRIPPER("clever_dripper", "聪明杯", true),
     AEROPRESS("aeropress", "爱乐压", true),
-    COLD_BREW("cold_brew", "冷萃壶", false),
+    COLD_BREW("cold_brew", "冷萃", false),
     ;
 
     companion object {
@@ -19,18 +58,35 @@ enum class BrewMethod(
 }
 
 enum class RoastLevel(
-    val code: String,
+    val storageValue: Int,
     val displayName: String,
+    val shortLabel: String,
 ) {
-    LIGHT("light", "浅烘焙"),
-    MEDIUM_LIGHT("medium_light", "中浅烘焙"),
-    MEDIUM("medium", "中烘焙"),
-    MEDIUM_DARK("medium_dark", "中深烘焙"),
-    DARK("dark", "深烘焙"),
+    EXTREME_LIGHT(0, "极浅", "极浅"),
+    LIGHT(1, "浅", "浅"),
+    LIGHT_MEDIUM(2, "浅中", "浅中"),
+    MEDIUM(3, "中", "中"),
+    MEDIUM_DARK(4, "中深", "中深"),
+    DARK(5, "深", "深"),
+    EXTREME_DARK(6, "极深", "极深"),
     ;
 
     companion object {
-        fun fromCode(code: String?): RoastLevel? = entries.firstOrNull { it.code == code }
+        fun fromStorageValue(value: Int?): RoastLevel = entries.firstOrNull { it.storageValue == value } ?: MEDIUM
+    }
+}
+
+enum class BeanProcessMethod(
+    val storageValue: Int,
+    val displayName: String,
+) {
+    NATURAL(0, "日晒"),
+    WASHED(1, "水洗"),
+    HONEY(2, "蜜处理"),
+    ;
+
+    companion object {
+        fun fromStorageValue(value: Int?): BeanProcessMethod = entries.firstOrNull { it.storageValue == value } ?: WASHED
     }
 }
 
@@ -61,7 +117,7 @@ enum class NumericParameter(
     WATER_TEMP("水温", "°C"),
     BREW_RATIO("粉水比", ""),
     TOTAL_WATER("总水量", "ml"),
-    BYPASS_WATER("Bypass", "ml"),
+    BYPASS_WATER("旁路水量", "ml"),
     GRIND_SETTING("研磨格数", ""),
 }
 
@@ -72,10 +128,12 @@ enum class InsightConfidence(val displayName: String) {
 }
 
 data class AnalysisFilter(
+    val archiveId: Long? = null,
     val timeRange: AnalysisTimeRange = AnalysisTimeRange.LAST_90_DAYS,
     val brewMethod: BrewMethod? = null,
     val beanId: Long? = null,
     val roastLevel: RoastLevel? = null,
+    val processMethod: BeanProcessMethod? = null,
     val grinderId: Long? = null,
 ) {
     fun matches(record: CoffeeRecord, nowMillis: Long): Boolean {
@@ -84,19 +142,22 @@ data class AnalysisFilter(
             else -> record.brewedAt >= nowMillis - days * 24L * 60L * 60L * 1000L
         }
         return rangeMatches &&
+            (archiveId == null || record.archiveId == archiveId) &&
             (brewMethod == null || record.brewMethod == brewMethod) &&
             (beanId == null || record.beanProfileId == beanId) &&
             (roastLevel == null || record.beanRoastLevelSnapshot == roastLevel) &&
+            (processMethod == null || record.beanProcessMethodSnapshot == processMethod) &&
             (grinderId == null || record.grinderProfileId == grinderId)
     }
 }
 
 data class BeanProfile(
     val id: Long = 0L,
+    val archiveId: Long = 0L,
     val name: String,
     val roaster: String = "",
     val origin: String = "",
-    val process: String = "",
+    val processMethod: BeanProcessMethod = BeanProcessMethod.WASHED,
     val variety: String = "",
     val roastLevel: RoastLevel,
     val roastDateEpochDay: Long? = null,
@@ -106,6 +167,7 @@ data class BeanProfile(
 
 data class GrinderProfile(
     val id: Long = 0L,
+    val archiveId: Long = 0L,
     val name: String,
     val minSetting: Double,
     val maxSetting: Double,
@@ -117,6 +179,7 @@ data class GrinderProfile(
 
 data class FlavorTag(
     val id: Long = 0L,
+    val archiveId: Long = 0L,
     val name: String,
     val isPreset: Boolean = false,
 )
@@ -148,11 +211,13 @@ data class SubjectiveEvaluation(
 
 data class CoffeeRecord(
     val id: Long = 0L,
+    val archiveId: Long = 0L,
     val status: RecordStatus = RecordStatus.DRAFT,
     val brewMethod: BrewMethod? = null,
     val beanProfileId: Long? = null,
     val beanNameSnapshot: String? = null,
     val beanRoastLevelSnapshot: RoastLevel? = null,
+    val beanProcessMethodSnapshot: BeanProcessMethod? = null,
     val grinderProfileId: Long? = null,
     val grinderNameSnapshot: String? = null,
     val grindSetting: Double? = null,
@@ -208,6 +273,48 @@ data class SubjectiveDimensionAverage(
     val average: Double,
 )
 
+data class AnalyticsSummary(
+    val sampleCount: Int = 0,
+    val beanCount: Int = 0,
+    val grinderCount: Int = 0,
+    val methodCount: Int = 0,
+    val firstRecordAt: Long? = null,
+    val lastRecordAt: Long? = null,
+)
+
+data class RangeInsight(
+    val parameter: NumericParameter,
+    val message: String,
+    val sampleCount: Int,
+    val confidence: InsightConfidence,
+)
+
+data class MethodComparisonInsight(
+    val method: BrewMethod,
+    val message: String,
+    val sampleCount: Int,
+    val confidence: InsightConfidence,
+)
+
+data class BeanComparisonInsight(
+    val beanName: String,
+    val message: String,
+    val sampleCount: Int,
+    val confidence: InsightConfidence,
+)
+
+data class OutlierInsight(
+    val recordId: Long,
+    val title: String,
+    val message: String,
+    val score: Int,
+)
+
+data class SuggestedNextStep(
+    val title: String,
+    val message: String,
+)
+
 data class InsightCard(
     val title: String,
     val message: String,
@@ -219,12 +326,18 @@ data class InsightCard(
 
 data class AnalyticsDashboard(
     val filter: AnalysisFilter,
+    val summary: AnalyticsSummary = AnalyticsSummary(),
     val sampleCount: Int = 0,
     val insightCards: List<InsightCard> = emptyList(),
     val methodAverages: List<MethodAverage> = emptyList(),
     val timelinePoints: List<TimelinePoint> = emptyList(),
     val scatterSeries: Map<NumericParameter, List<ScatterPoint>> = emptyMap(),
     val dimensionAverages: List<SubjectiveDimensionAverage> = emptyList(),
+    val rangeInsights: List<RangeInsight> = emptyList(),
+    val methodComparisonInsights: List<MethodComparisonInsight> = emptyList(),
+    val beanComparisonInsights: List<BeanComparisonInsight> = emptyList(),
+    val outlierInsights: List<OutlierInsight> = emptyList(),
+    val suggestedNextSteps: List<SuggestedNextStep> = emptyList(),
 ) {
     val hasEnoughData: Boolean get() = sampleCount >= 1
 }

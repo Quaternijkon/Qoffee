@@ -1,5 +1,9 @@
 package com.qoffee.data.mapper
 
+import com.qoffee.core.model.Archive
+import com.qoffee.core.model.ArchiveSummary
+import com.qoffee.core.model.ArchiveType
+import com.qoffee.core.model.BeanProcessMethod
 import com.qoffee.core.model.BeanProfile
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
@@ -8,6 +12,8 @@ import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RoastLevel
 import com.qoffee.core.model.SubjectiveEvaluation
+import com.qoffee.data.local.ArchiveEntity
+import com.qoffee.data.local.ArchiveSummaryRow
 import com.qoffee.data.local.BeanProfileEntity
 import com.qoffee.data.local.BrewRecordEntity
 import com.qoffee.data.local.BrewRecordWithRelations
@@ -15,14 +21,33 @@ import com.qoffee.data.local.FlavorTagEntity
 import com.qoffee.data.local.GrinderProfileEntity
 import com.qoffee.data.local.SubjectiveEvaluationEntity
 
+fun ArchiveEntity.toDomain() = Archive(
+    id = id,
+    name = name,
+    type = ArchiveType.fromCode(typeCode),
+    isReadOnly = isReadOnly,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    sortOrder = sortOrder,
+)
+
+fun ArchiveSummaryRow.toDomain() = ArchiveSummary(
+    archive = archive.toDomain(),
+    beanCount = beanCount,
+    grinderCount = grinderCount,
+    recordCount = recordCount,
+    lastRecordAt = lastRecordAt,
+)
+
 fun BeanProfileEntity.toDomain() = BeanProfile(
     id = id,
+    archiveId = archiveId,
     name = name,
     roaster = roaster,
     origin = origin,
-    process = process,
+    processMethod = BeanProcessMethod.fromStorageValue(processValue),
     variety = variety,
-    roastLevel = RoastLevel.fromCode(roastLevelCode) ?: RoastLevel.MEDIUM,
+    roastLevel = RoastLevel.fromStorageValue(roastLevelValue),
     roastDateEpochDay = roastDateEpochDay,
     notes = notes,
     createdAt = createdAt,
@@ -30,12 +55,13 @@ fun BeanProfileEntity.toDomain() = BeanProfile(
 
 fun BeanProfile.toEntity() = BeanProfileEntity(
     id = id,
+    archiveId = archiveId,
     name = name,
     roaster = roaster,
     origin = origin,
-    process = process,
+    processValue = processMethod.storageValue,
     variety = variety,
-    roastLevelCode = roastLevel.code,
+    roastLevelValue = roastLevel.storageValue,
     roastDateEpochDay = roastDateEpochDay,
     notes = notes,
     createdAt = createdAt,
@@ -43,6 +69,7 @@ fun BeanProfile.toEntity() = BeanProfileEntity(
 
 fun GrinderProfileEntity.toDomain() = GrinderProfile(
     id = id,
+    archiveId = archiveId,
     name = name,
     minSetting = minSetting,
     maxSetting = maxSetting,
@@ -54,6 +81,7 @@ fun GrinderProfileEntity.toDomain() = GrinderProfile(
 
 fun GrinderProfile.toEntity() = GrinderProfileEntity(
     id = id,
+    archiveId = archiveId,
     name = name,
     minSetting = minSetting,
     maxSetting = maxSetting,
@@ -65,6 +93,7 @@ fun GrinderProfile.toEntity() = GrinderProfileEntity(
 
 fun FlavorTagEntity.toDomain() = FlavorTag(
     id = id,
+    archiveId = archiveId,
     name = name,
     isPreset = isPreset,
 )
@@ -100,11 +129,13 @@ fun BrewRecordEntity.toDomain(
     subjectiveEvaluation: SubjectiveEvaluation? = null,
 ) = CoffeeRecord(
     id = id,
+    archiveId = archiveId,
     status = RecordStatus.fromCode(status),
     brewMethod = BrewMethod.fromCode(brewMethodCode),
     beanProfileId = beanId,
     beanNameSnapshot = beanNameSnapshot,
-    beanRoastLevelSnapshot = RoastLevel.fromCode(beanRoastLevelSnapshotCode),
+    beanRoastLevelSnapshot = beanRoastLevelSnapshotValue?.let(RoastLevel::fromStorageValue),
+    beanProcessMethodSnapshot = beanProcessMethodSnapshotValue?.let(BeanProcessMethod::fromStorageValue),
     grinderProfileId = grinderId,
     grinderNameSnapshot = grinderNameSnapshot,
     grindSetting = grindSetting,

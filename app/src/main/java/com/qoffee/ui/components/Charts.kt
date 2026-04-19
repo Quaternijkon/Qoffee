@@ -34,7 +34,7 @@ fun MethodBarChart(
     if (values.isEmpty()) {
         Box(modifier = modifier.height(180.dp).fillMaxWidth()) {
             Text(
-                text = "No chart data yet",
+                text = "暂无图表数据",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 72.dp),
@@ -82,7 +82,7 @@ fun ScoreTrendChart(
     if (points.size < 2) {
         Box(modifier = modifier.height(180.dp).fillMaxWidth()) {
             Text(
-                text = "At least two rated records are needed to show a trend",
+                text = "至少需要两条带评分记录才能显示趋势",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 72.dp),
@@ -137,7 +137,7 @@ fun ScatterChart(
     if (points.isEmpty()) {
         Box(modifier = modifier.height(180.dp).fillMaxWidth()) {
             Text(
-                text = "No rated samples for this parameter",
+                text = "当前参数暂无可分析样本",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 72.dp),
@@ -202,7 +202,7 @@ fun SubjectiveRadarLikeBars(
     if (values.isEmpty()) {
         Box(modifier = modifier.height(180.dp).fillMaxWidth()) {
             Text(
-                text = "No subjective averages yet",
+                text = "暂无主观维度均值",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 72.dp),

@@ -2,16 +2,21 @@ package com.qoffee.core.analytics
 
 import com.qoffee.core.common.TimeProvider
 import com.qoffee.core.model.AnalyticsDashboard
+import com.qoffee.core.model.AnalyticsSummary
 import com.qoffee.core.model.AnalysisFilter
-import com.qoffee.core.model.BrewMethod
+import com.qoffee.core.model.BeanComparisonInsight
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.InsightCard
 import com.qoffee.core.model.InsightConfidence
 import com.qoffee.core.model.MethodAverage
+import com.qoffee.core.model.MethodComparisonInsight
 import com.qoffee.core.model.NumericParameter
+import com.qoffee.core.model.OutlierInsight
+import com.qoffee.core.model.RangeInsight
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.ScatterPoint
 import com.qoffee.core.model.SubjectiveDimensionAverage
+import com.qoffee.core.model.SuggestedNextStep
 import com.qoffee.core.model.TimelinePoint
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -38,6 +43,15 @@ class AnalyticsEngine @Inject constructor(
         if (qualified.isEmpty()) {
             return AnalyticsDashboard(filter = filter)
         }
+
+        val summary = AnalyticsSummary(
+            sampleCount = qualified.size,
+            beanCount = qualified.mapNotNull { it.beanNameSnapshot }.distinct().size,
+            grinderCount = qualified.mapNotNull { it.grinderNameSnapshot }.distinct().size,
+            methodCount = qualified.mapNotNull { it.brewMethod }.distinct().size,
+            firstRecordAt = qualified.minOfOrNull { it.brewedAt },
+            lastRecordAt = qualified.maxOfOrNull { it.brewedAt },
+        )
 
         val methodAverages = qualified
             .groupBy { it.brewMethod }
@@ -87,83 +101,76 @@ class AnalyticsEngine @Inject constructor(
             }
         }
 
-        val insights = buildInsights(qualified, filter, methodAverages)
+        val rangeInsights = NumericParameter.entries.mapNotNull { parameter ->
+            buildRangeInsight(parameter, qualified, buildFilterContext(filter))
+        }
+
+        val methodComparisonInsights = buildMethodComparisonInsights(methodAverages, buildFilterContext(filter))
+        val beanComparisonInsights = buildBeanComparisonInsights(qualified, buildFilterContext(filter))
+        val outlierInsights = buildOutlierInsights(qualified)
+        val suggestedNextSteps = buildNextSteps(rangeInsights, methodComparisonInsights, outlierInsights)
+        val insightCards = buildInsightCards(rangeInsights, methodComparisonInsights, beanComparisonInsights, outlierInsights, buildFilterContext(filter))
 
         return AnalyticsDashboard(
             filter = filter,
+            summary = summary,
             sampleCount = qualified.size,
-            insightCards = insights,
+            insightCards = insightCards,
             methodAverages = methodAverages,
             timelinePoints = timeline,
             scatterSeries = scatterSeries,
             dimensionAverages = dimensionAverages,
+            rangeInsights = rangeInsights,
+            methodComparisonInsights = methodComparisonInsights,
+            beanComparisonInsights = beanComparisonInsights,
+            outlierInsights = outlierInsights,
+            suggestedNextSteps = suggestedNextSteps,
         )
     }
 
-    private fun buildInsights(
-        records: List<CoffeeRecord>,
-        filter: AnalysisFilter,
+    private fun buildMethodComparisonInsights(
         methodAverages: List<MethodAverage>,
-    ): List<InsightCard> {
-        if (records.size < 5) return emptyList()
-        val filterContext = buildFilterContext(filter)
-        val insights = mutableListOf<InsightCard>()
-
-        methodAverages
+        filterContext: String,
+    ): List<MethodComparisonInsight> {
+        return methodAverages
             .filter { it.sampleCount >= 3 }
-            .maxByOrNull { it.averageScore }
-            ?.let { best ->
-                insights += InsightCard(
-                    title = "制作方式表现",
-                    message = "在你的记录中，${best.brewMethod.displayName}更常拿到更高的总体评价（平均 ${scoreFormat.format(best.averageScore)} 分，n=${best.sampleCount}）。",
-                    sampleCount = best.sampleCount,
-                    parameterType = "brew_method",
-                    confidence = confidenceFrom(best.sampleCount, best.averageScore / 10.0),
-                    filterContext = filterContext,
+            .take(2)
+            .map { average ->
+                MethodComparisonInsight(
+                    method = average.brewMethod,
+                    message = "在 $filterContext 条件下，${average.brewMethod.displayName} 的平均总体评分为 ${scoreFormat.format(average.averageScore)}。",
+                    sampleCount = average.sampleCount,
+                    confidence = confidenceFrom(average.sampleCount, average.averageScore / 10.0),
                 )
             }
-
-        NumericParameter.entries.forEach { parameter ->
-            val points = records.mapNotNull { record ->
-                val x = parameter.extract(record) ?: return@mapNotNull null
-                val y = record.subjectiveEvaluation?.overall?.toDouble() ?: return@mapNotNull null
-                x to y
-            }
-            if (points.size >= 5) {
-                val rho = spearman(points.map { it.first }, points.map { it.second })
-                if (abs(rho) >= 0.35) {
-                    insights += InsightCard(
-                        title = "${parameter.displayName}相关性",
-                        message = "在你的记录中，${correlationDirection(rho)}的${parameter.displayName}与总体评价相关（ρ=${correlationFormat.format(rho)}，n=${points.size}）。",
-                        sampleCount = points.size,
-                        parameterType = parameter.name.lowercase(),
-                        confidence = confidenceFrom(points.size, abs(rho)),
-                        filterContext = filterContext,
-                    )
-                }
-            }
-
-            bucketInsight(parameter, records, filterContext)?.let { insights += it }
-        }
-
-        return insights
-            .sortedWith(
-                compareByDescending<InsightCard> {
-                    when (it.confidence) {
-                        InsightConfidence.HIGH -> 3
-                        InsightConfidence.MEDIUM -> 2
-                        InsightConfidence.LOW -> 1
-                    }
-                }.thenByDescending { it.sampleCount },
-            )
-            .take(6)
     }
 
-    private fun bucketInsight(
+    private fun buildBeanComparisonInsights(
+        records: List<CoffeeRecord>,
+        filterContext: String,
+    ): List<BeanComparisonInsight> {
+        return records
+            .groupBy { it.beanNameSnapshot }
+            .mapNotNull { (beanName, group) ->
+                val validName = beanName ?: return@mapNotNull null
+                if (group.size < 3) return@mapNotNull null
+                val avg = group.mapNotNull { it.subjectiveEvaluation?.overall?.toDouble() }.average()
+                BeanComparisonInsight(
+                    beanName = validName,
+                    message = "在 $filterContext 条件下，$validName 的平均总体评分为 ${scoreFormat.format(avg)}。",
+                    sampleCount = group.size,
+                    confidence = confidenceFrom(group.size, avg / 10.0),
+                )
+            }
+            .sortedByDescending { it.sampleCount }
+            .take(2)
+    }
+
+    private fun buildRangeInsight(
         parameter: NumericParameter,
         records: List<CoffeeRecord>,
         filterContext: String,
-    ): InsightCard? {
+    ): RangeInsight? {
         val sorted = records.mapNotNull { record ->
             val x = parameter.extract(record) ?: return@mapNotNull null
             val y = record.subjectiveEvaluation?.overall?.toDouble() ?: return@mapNotNull null
@@ -176,26 +183,132 @@ class AnalyticsEngine @Inject constructor(
 
         val low = sorted.take(bucketSize)
         val high = sorted.takeLast(bucketSize)
-        if (low.size < 3 || high.size < 3) return null
-
         val lowAvg = low.map { it.second }.average()
         val highAvg = high.map { it.second }.average()
         val delta = highAvg - lowAvg
         if (abs(delta) < 0.8) return null
 
-        val direction = if (delta > 0) "更高" else "更低"
         val betterRange = if (delta > 0) high else low
-        val values = betterRange.map { it.first }
-        val min = scoreFormat.format(values.minOrNull())
-        val max = scoreFormat.format(values.maxOrNull())
-        return InsightCard(
-            title = "${parameter.displayName}区间表现",
-            message = "在你的记录中，${parameter.displayName}位于 ${min}-${max}${parameter.unitLabel} 的样本更常出现${direction}评分（均值差 ${scoreFormat.format(abs(delta))} 分）。",
-            sampleCount = low.size + high.size,
-            parameterType = parameter.name.lowercase(),
+        val min = scoreFormat.format(betterRange.minOf { it.first })
+        val max = scoreFormat.format(betterRange.maxOf { it.first })
+        return RangeInsight(
+            parameter = parameter,
+            message = "在 $filterContext 下，${parameter.displayName}位于 ${min}-${max}${parameter.unitLabel} 的样本更常出现更高评分。",
+            sampleCount = betterRange.size,
             confidence = confidenceFrom(low.size + high.size, abs(delta) / 2.0),
-            filterContext = filterContext,
         )
+    }
+
+    private fun buildOutlierInsights(records: List<CoffeeRecord>): List<OutlierInsight> {
+        val sorted = records.sortedByDescending { it.subjectiveEvaluation?.overall ?: 0 }
+        val highest = sorted.firstOrNull()
+        val lowest = sorted.lastOrNull()
+        return buildList {
+            highest?.subjectiveEvaluation?.overall?.let { score ->
+                add(
+                    OutlierInsight(
+                        recordId = highest.id,
+                        title = "高分样本",
+                        message = "这条记录是当前筛选下的高分样本，适合拿来反向查看参数组合。",
+                        score = score,
+                    ),
+                )
+            }
+            lowest?.subjectiveEvaluation?.overall?.let { score ->
+                add(
+                    OutlierInsight(
+                        recordId = lowest.id,
+                        title = "低分样本",
+                        message = "这条记录是当前筛选下的低分样本，适合排查参数偏离区间的原因。",
+                        score = score,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun buildNextSteps(
+        rangeInsights: List<RangeInsight>,
+        methodComparisonInsights: List<MethodComparisonInsight>,
+        outlierInsights: List<OutlierInsight>,
+    ): List<SuggestedNextStep> {
+        return buildList {
+            rangeInsights.firstOrNull()?.let { insight ->
+                add(
+                    SuggestedNextStep(
+                        title = "优先验证参数区间",
+                        message = insight.message,
+                    ),
+                )
+            }
+            methodComparisonInsights.firstOrNull()?.let { insight ->
+                add(
+                    SuggestedNextStep(
+                        title = "优先复做表现最好的制作方式",
+                        message = insight.message,
+                    ),
+                )
+            }
+            outlierInsights.firstOrNull()?.let { insight ->
+                add(
+                    SuggestedNextStep(
+                        title = "回看离群样本",
+                        message = "${insight.title}这条记录值得重点复盘。",
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun buildInsightCards(
+        rangeInsights: List<RangeInsight>,
+        methodComparisonInsights: List<MethodComparisonInsight>,
+        beanComparisonInsights: List<BeanComparisonInsight>,
+        outlierInsights: List<OutlierInsight>,
+        filterContext: String,
+    ): List<InsightCard> {
+        val cards = mutableListOf<InsightCard>()
+        cards += rangeInsights.map {
+            InsightCard(
+                title = "${it.parameter.displayName}区间表现",
+                message = it.message,
+                sampleCount = it.sampleCount,
+                parameterType = it.parameter.name.lowercase(),
+                confidence = it.confidence,
+                filterContext = filterContext,
+            )
+        }
+        cards += methodComparisonInsights.map {
+            InsightCard(
+                title = "制作方式对比",
+                message = it.message,
+                sampleCount = it.sampleCount,
+                parameterType = "method_comparison",
+                confidence = it.confidence,
+                filterContext = filterContext,
+            )
+        }
+        cards += beanComparisonInsights.map {
+            InsightCard(
+                title = "豆子对比",
+                message = it.message,
+                sampleCount = it.sampleCount,
+                parameterType = "bean_comparison",
+                confidence = it.confidence,
+                filterContext = filterContext,
+            )
+        }
+        cards += outlierInsights.map {
+            InsightCard(
+                title = it.title,
+                message = it.message,
+                sampleCount = 1,
+                parameterType = "outlier",
+                confidence = InsightConfidence.MEDIUM,
+                filterContext = filterContext,
+            )
+        }
+        return cards.take(6)
     }
 
     private fun buildFilterContext(filter: AnalysisFilter): String {
@@ -203,6 +316,7 @@ class AnalyticsEngine @Inject constructor(
             add(filter.timeRange.displayName)
             filter.brewMethod?.let { add(it.displayName) }
             filter.roastLevel?.let { add(it.displayName) }
+            filter.processMethod?.let { add(it.displayName) }
         }
         return parts.joinToString(" / ")
     }
@@ -213,10 +327,6 @@ class AnalyticsEngine @Inject constructor(
             sampleSize >= 8 && effect >= 0.45 -> InsightConfidence.MEDIUM
             else -> InsightConfidence.LOW
         }
-    }
-
-    private fun correlationDirection(rho: Double): String {
-        return if (rho >= 0) "更高" else "更低"
     }
 
     private fun NumericParameter.extract(record: CoffeeRecord): Double? {

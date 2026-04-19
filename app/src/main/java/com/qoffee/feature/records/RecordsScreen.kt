@@ -98,10 +98,10 @@ class RecordsViewModel @Inject constructor(
             )
         }
         .stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = RecordsUiState(),
-    )
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = RecordsUiState(),
+        )
 
     fun updateTimeRange(range: AnalysisTimeRange) {
         filter.value = filter.value.copy(timeRange = range)
@@ -129,12 +129,14 @@ fun RecordsRoute(
     paddingValues: PaddingValues,
     onOpenDetail: (Long) -> Unit,
     onOpenEditor: (Long?, Long?) -> Unit,
+    isReadOnlyArchive: Boolean,
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     RecordsScreen(
         paddingValues = paddingValues,
         uiState = uiState,
+        isReadOnlyArchive = isReadOnlyArchive,
         onTimeRangeChange = viewModel::updateTimeRange,
         onMethodChange = viewModel::updateMethod,
         onBeanChange = viewModel::updateBean,
@@ -149,6 +151,7 @@ fun RecordsRoute(
 private fun RecordsScreen(
     paddingValues: PaddingValues,
     uiState: RecordsUiState,
+    isReadOnlyArchive: Boolean,
     onTimeRangeChange: (AnalysisTimeRange) -> Unit,
     onMethodChange: (BrewMethod?) -> Unit,
     onBeanChange: (Long?) -> Unit,
@@ -167,38 +170,38 @@ private fun RecordsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroCard(
-            title = "Keep one record for brew and taste",
-            subtitle = "Objective parameters save as a draft instantly, then subjective notes can be added later.",
+            title = "把参数和感受放进同一条记录",
+            subtitle = "客观参数会先保存为草稿，主观感受可以稍后补充，复盘也更连贯。",
         )
 
-        SectionCard(title = "Record filters") {
+        SectionCard(title = "记录筛选") {
             DropdownField(
-                label = "Time range",
+                label = "时间范围",
                 selectedLabel = uiState.filter.timeRange.displayName,
                 options = AnalysisTimeRange.entries.map { DropdownOption(it.displayName, it) },
                 onSelected = { it?.let(onTimeRangeChange) },
                 allowClear = false,
             )
             DropdownField(
-                label = "Brew method",
+                label = "制作方式",
                 selectedLabel = uiState.filter.brewMethod?.displayName,
                 options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
                 onSelected = onMethodChange,
             )
             DropdownField(
-                label = "Bean",
+                label = "咖啡豆",
                 selectedLabel = uiState.beans.firstOrNull { it.id == uiState.filter.beanId }?.name,
                 options = uiState.beans.map { DropdownOption(it.name, it.id) },
                 onSelected = onBeanChange,
             )
             DropdownField(
-                label = "Roast level",
+                label = "烘焙度",
                 selectedLabel = uiState.filter.roastLevel?.displayName,
                 options = RoastLevel.entries.map { DropdownOption(it.displayName, it) },
                 onSelected = onRoastLevelChange,
             )
             DropdownField(
-                label = "Grinder",
+                label = "磨豆机",
                 selectedLabel = uiState.grinders.firstOrNull { it.id == uiState.filter.grinderId }?.name,
                 options = uiState.grinders.map { DropdownOption(it.name, it.id) },
                 onSelected = onGrinderChange,
@@ -207,13 +210,18 @@ private fun RecordsScreen(
 
         if (uiState.records.isEmpty()) {
             EmptyStateCard(
-                title = "No records yet",
-                subtitle = "Use the floating action button to create the first brew log.",
+                title = "还没有记录",
+                subtitle = if (isReadOnlyArchive) {
+                    "当前处于只读示范存档，可以先浏览数据分析，再复制为自己的存档。"
+                } else {
+                    "点击右下角按钮创建第一条冲煮记录。"
+                },
             )
         } else {
             uiState.records.forEach { record ->
                 RecordSummaryCard(
                     record = record,
+                    isReadOnlyArchive = isReadOnlyArchive,
                     onOpenDetail = { onOpenDetail(record.id) },
                     onContinue = { onOpenEditor(record.id, null) },
                     onDuplicate = { onOpenEditor(null, record.id) },
@@ -226,42 +234,45 @@ private fun RecordsScreen(
 @Composable
 private fun RecordSummaryCard(
     record: CoffeeRecord,
+    isReadOnlyArchive: Boolean,
     onOpenDetail: () -> Unit,
     onContinue: () -> Unit,
     onDuplicate: () -> Unit,
 ) {
-    val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
+    val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA) }
     val scoreFormat = DecimalFormat("0.0")
     SectionCard(
         title = buildString {
-            append(record.brewMethod?.displayName ?: "Draft")
+            append(record.brewMethod?.displayName ?: "草稿")
             if (!record.beanNameSnapshot.isNullOrBlank()) append(" | ${record.beanNameSnapshot}")
         },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatChip(text = if (record.status == RecordStatus.DRAFT) "Draft" else "Completed")
-            record.subjectiveEvaluation?.overall?.let { StatChip(text = "Overall $it / 10") }
-            record.brewRatio?.let { StatChip(text = "Ratio ${scoreFormat.format(it)}") }
+            StatChip(text = if (record.status == RecordStatus.DRAFT) "草稿" else "已完成")
+            record.subjectiveEvaluation?.overall?.let { StatChip(text = "总体 $it / 10") }
+            record.brewRatio?.let { StatChip(text = "粉水比 ${scoreFormat.format(it)}") }
         }
         Text(
-            text = "Time ${formatter.format(Date(record.brewedAt))}",
+            text = "时间 ${formatter.format(Date(record.brewedAt))}",
             style = MaterialTheme.typography.bodyLarge,
         )
         Text(
             text = buildString {
-                append("Dose ${record.coffeeDoseG ?: "-"}g")
-                append(" | Water ${record.brewWaterMl ?: "-"}ml")
-                record.waterTempC?.let { append(" | ${it}C") }
+                append("粉量 ${record.coffeeDoseG ?: "-"}g")
+                append(" | 水量 ${record.brewWaterMl ?: "-"}ml")
+                record.waterTempC?.let { append(" | ${it}°C") }
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onOpenDetail) {
-                Text("Details")
+                Text("详情")
             }
-            Button(onClick = if (record.status == RecordStatus.DRAFT) onContinue else onDuplicate) {
-                Text(if (record.status == RecordStatus.DRAFT) "Continue" else "Duplicate")
+            if (!isReadOnlyArchive) {
+                Button(onClick = if (record.status == RecordStatus.DRAFT) onContinue else onDuplicate) {
+                    Text(if (record.status == RecordStatus.DRAFT) "继续填写" else "复制一份")
+                }
             }
         }
     }

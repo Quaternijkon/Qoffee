@@ -8,23 +8,66 @@ import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
-@Entity(tableName = "bean_profiles")
+@Entity(tableName = "archives")
+data class ArchiveEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val name: String,
+    val typeCode: String,
+    val isReadOnly: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val sortOrder: Int,
+)
+
+data class ArchiveSummaryRow(
+    @Embedded val archive: ArchiveEntity,
+    val beanCount: Int,
+    val grinderCount: Int,
+    val recordCount: Int,
+    val lastRecordAt: Long?,
+)
+
+@Entity(
+    tableName = "bean_profiles",
+    foreignKeys = [
+        ForeignKey(
+            entity = ArchiveEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["archiveId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("archiveId")],
+)
 data class BeanProfileEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val archiveId: Long,
     val name: String,
     val roaster: String,
     val origin: String,
-    val process: String,
+    val processValue: Int,
     val variety: String,
-    val roastLevelCode: String,
+    val roastLevelValue: Int,
     val roastDateEpochDay: Long?,
     val notes: String,
     val createdAt: Long,
 )
 
-@Entity(tableName = "grinder_profiles")
+@Entity(
+    tableName = "grinder_profiles",
+    foreignKeys = [
+        ForeignKey(
+            entity = ArchiveEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["archiveId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("archiveId")],
+)
 data class GrinderProfileEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val archiveId: Long,
     val name: String,
     val minSetting: Double,
     val maxSetting: Double,
@@ -37,6 +80,12 @@ data class GrinderProfileEntity(
 @Entity(
     tableName = "brew_records",
     foreignKeys = [
+        ForeignKey(
+            entity = ArchiveEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["archiveId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
         ForeignKey(
             entity = BeanProfileEntity::class,
             parentColumns = ["id"],
@@ -51,6 +100,7 @@ data class GrinderProfileEntity(
         ),
     ],
     indices = [
+        Index("archiveId"),
         Index("status"),
         Index("brewedAt"),
         Index("beanId"),
@@ -59,11 +109,13 @@ data class GrinderProfileEntity(
 )
 data class BrewRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val archiveId: Long,
     val status: String,
     val brewMethodCode: String?,
     val beanId: Long?,
     val beanNameSnapshot: String?,
-    val beanRoastLevelSnapshotCode: String?,
+    val beanRoastLevelSnapshotValue: Int?,
+    val beanProcessMethodSnapshotValue: Int?,
     val grinderId: Long?,
     val grinderNameSnapshot: String?,
     val grindSetting: Double?,
@@ -105,10 +157,19 @@ data class SubjectiveEvaluationEntity(
 
 @Entity(
     tableName = "flavor_tags",
-    indices = [Index(value = ["name"], unique = true)],
+    foreignKeys = [
+        ForeignKey(
+            entity = ArchiveEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["archiveId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["archiveId", "name"], unique = true), Index("archiveId")],
 )
 data class FlavorTagEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val archiveId: Long,
     val name: String,
     val isPreset: Boolean,
 )

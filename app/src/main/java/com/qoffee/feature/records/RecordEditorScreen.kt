@@ -1,5 +1,6 @@
 package com.qoffee.feature.records
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +42,7 @@ import com.qoffee.core.model.SubjectiveEvaluation
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.PreferenceRepository
 import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.ui.components.BeanIdentityCard
 import com.qoffee.ui.components.DropdownField
 import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.EmptyStateCard
@@ -60,12 +64,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-
-internal enum class EditorStep(val label: String) {
-    OBJECTIVE("Objective"),
-    SUBJECTIVE("Subjective"),
-    CONFIRM("Confirm"),
-}
 
 internal data class ObjectiveFormState(
     val brewMethod: BrewMethod? = null,
@@ -95,7 +93,6 @@ internal data class RecordEditorUiState(
     val isLoading: Boolean = true,
     val recordId: Long? = null,
     val record: CoffeeRecord? = null,
-    val step: EditorStep = EditorStep.OBJECTIVE,
     val objective: ObjectiveFormState = ObjectiveFormState(),
     val subjective: SubjectiveFormState = SubjectiveFormState(),
     val beans: List<BeanProfile> = emptyList(),
@@ -152,41 +149,33 @@ class RecordEditorViewModel @Inject constructor(
                     )
                 }
                 .combine(catalogRepository.observeFlavorTags()) { intermediate, tags ->
-                val current = uiStateInternal.value
-                RecordEditorUiState(
-                    isLoading = false,
-                    recordId = resolvedRecordId,
-                    record = intermediate.record,
-                    step = current.step,
-                    objective = if (!initialBindingDone && intermediate.record != null) {
-                        intermediate.record.toObjectiveForm()
-                    } else {
-                        current.objective
-                    },
-                    subjective = if (!initialBindingDone && intermediate.record != null) {
-                        intermediate.record.toSubjectiveForm()
-                    } else {
-                        current.subjective
-                    },
-                    beans = intermediate.beans,
-                    grinders = intermediate.grinders,
-                    flavorTags = tags,
-                    validationErrors = current.validationErrors,
-                )
-            }.collect { newState ->
-                if (!initialBindingDone && newState.record != null) {
-                    initialBindingDone = true
+                    val current = uiStateInternal.value
+                    RecordEditorUiState(
+                        isLoading = false,
+                        recordId = resolvedRecordId,
+                        record = intermediate.record,
+                        objective = if (!initialBindingDone && intermediate.record != null) {
+                            intermediate.record.toObjectiveForm()
+                        } else {
+                            current.objective
+                        },
+                        subjective = if (!initialBindingDone && intermediate.record != null) {
+                            intermediate.record.toSubjectiveForm()
+                        } else {
+                            current.subjective
+                        },
+                        beans = intermediate.beans,
+                        grinders = intermediate.grinders,
+                        flavorTags = tags,
+                        validationErrors = current.validationErrors,
+                    )
+                }.collect { newState ->
+                    if (!initialBindingDone && newState.record != null) {
+                        initialBindingDone = true
+                    }
+                    uiStateInternal.value = newState
                 }
-                uiStateInternal.value = newState
-            }
         }
-    }
-
-    fun updateStep(stepIndex: Int) {
-        uiStateInternal.value = uiStateInternal.value.copy(
-            step = EditorStep.entries[stepIndex.coerceIn(0, EditorStep.entries.lastIndex)],
-            validationErrors = emptyList(),
-        )
     }
 
     fun updateBrewMethod(method: BrewMethod?) = updateObjective(uiStateInternal.value.objective.copy(brewMethod = method))
@@ -251,7 +240,6 @@ class RecordEditorViewModel @Inject constructor(
                 eventsInternal.emit(RecordEditorEvent.Completed(recordId))
             } else {
                 uiStateInternal.value = uiStateInternal.value.copy(
-                    step = EditorStep.CONFIRM,
                     validationErrors = result.errors,
                 )
             }
@@ -331,7 +319,6 @@ fun RecordEditorRoute(
         paddingValues = paddingValues,
         uiState = uiState,
         onBack = onBack,
-        onStepChange = viewModel::updateStep,
         onMethodChange = viewModel::updateBrewMethod,
         onBeanChange = viewModel::updateBean,
         onGrinderChange = viewModel::updateGrinder,
@@ -360,7 +347,6 @@ private fun RecordEditorScreen(
     paddingValues: PaddingValues,
     uiState: RecordEditorUiState,
     onBack: () -> Unit,
-    onStepChange: (Int) -> Unit,
     onMethodChange: (BrewMethod?) -> Unit,
     onBeanChange: (Long?) -> Unit,
     onGrinderChange: (Long?) -> Unit,
@@ -383,274 +369,219 @@ private fun RecordEditorScreen(
     onSubmit: () -> Unit,
 ) {
     var customTag by remember { mutableStateOf("") }
+    val selectedBean = uiState.beans.firstOrNull { it.id == uiState.objective.beanProfileId }
+    val objectiveProgress = listOf(
+        uiState.objective.brewMethod != null,
+        uiState.objective.beanProfileId != null,
+        uiState.objective.coffeeDoseG.isNotBlank(),
+        uiState.objective.brewWaterMl.isNotBlank(),
+        uiState.objective.waterTempC.isNotBlank() || uiState.objective.brewMethod?.isHotBrew == false,
+    ).count { it } / 5f
+    val subjectiveProgress = listOf(
+        uiState.subjective.aroma != null,
+        uiState.subjective.acidity != null,
+        uiState.subjective.sweetness != null,
+        uiState.subjective.bitterness != null,
+        uiState.subjective.body != null,
+        uiState.subjective.aftertaste != null,
+        uiState.subjective.overall != null,
+    ).count { it } / 7f
 
     if (uiState.isLoading) {
         EmptyStateCard(
-            title = "Preparing draft",
-            subtitle = "Qoffee is restoring the active draft or creating a new one.",
+            title = "正在准备草稿",
+            subtitle = "Qoffee 正在恢复未完成草稿，或为你创建一条新记录。",
             modifier = Modifier.padding(paddingValues),
         )
         return
     }
 
-    val selectedStepIndex = uiState.step.ordinal
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        HeroCard(
-            title = "One record, multiple passes",
-            subtitle = "Objective inputs save as draft instantly. Subjective notes can be added now or later.",
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            EditorStep.entries.forEachIndexed { index, step ->
-                OutlinedButton(onClick = { onStepChange(index) }) {
-                    Text(step.label)
+    Scaffold(
+        bottomBar = {
+            SectionCard(
+                title = "提交操作",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatChip(text = "自动保存")
+                    uiState.recordId?.let { StatChip(text = "记录 #$it") }
+                }
+                Button(
+                    onClick = onSubmit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("submit_record_button"),
+                ) {
+                    Text("完成提交")
                 }
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatChip(text = "Auto saved")
-            uiState.recordId?.let { StatChip(text = "Record #$it") }
-            uiState.record?.status?.let { status ->
-                StatChip(text = if (status.name == "DRAFT") "Draft" else "Completed")
-            }
-        }
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(innerPadding)
+                .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            HeroCard(
+                title = "在一页里完成整条记录",
+                subtitle = "减少来回切换，把客观参数、豆子信息和主观感受顺手写完。",
+            )
 
-        when (uiState.step) {
-            EditorStep.OBJECTIVE -> {
-                ObjectiveStep(
-                    uiState = uiState,
-                    onMethodChange = onMethodChange,
-                    onBeanChange = onBeanChange,
-                    onGrinderChange = onGrinderChange,
-                    onGrindSettingChange = onGrindSettingChange,
-                    onCoffeeDoseChange = onCoffeeDoseChange,
-                    onBrewWaterChange = onBrewWaterChange,
-                    onBypassWaterChange = onBypassWaterChange,
-                    onWaterTempChange = onWaterTempChange,
-                    onObjectiveNotesChange = onObjectiveNotesChange,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onBack) { Text("Back") }
-                    Button(onClick = { onStepChange(selectedStepIndex + 1) }) { Text("Next") }
-                }
+            OutlinedButton(onClick = onBack) {
+                Text("返回")
             }
 
-            EditorStep.SUBJECTIVE -> {
-                SubjectiveStep(
-                    uiState = uiState,
-                    customTag = customTag,
-                    onCustomTagChange = { customTag = it },
-                    onAddCustomTag = {
-                        onAddCustomTag(customTag)
-                        customTag = ""
-                    },
-                    onAromaChange = onAromaChange,
-                    onAcidityChange = onAcidityChange,
-                    onSweetnessChange = onSweetnessChange,
-                    onBitternessChange = onBitternessChange,
-                    onBodyChange = onBodyChange,
-                    onAftertasteChange = onAftertasteChange,
-                    onOverallChange = onOverallChange,
-                    onSubjectiveNotesChange = onSubjectiveNotesChange,
-                    onToggleTag = onToggleTag,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onStepChange(selectedStepIndex - 1) }) { Text("Back") }
-                    Button(onClick = { onStepChange(selectedStepIndex + 1) }) { Text("Confirm") }
-                }
+            SectionCard(title = "填写进度") {
+                Text("客观参数", style = MaterialTheme.typography.titleMedium)
+                LinearProgressIndicator(progress = objectiveProgress, modifier = Modifier.fillMaxWidth())
+                Text("主观感受", style = MaterialTheme.typography.titleMedium)
+                LinearProgressIndicator(progress = subjectiveProgress, modifier = Modifier.fillMaxWidth())
             }
 
-            EditorStep.CONFIRM -> {
-                ConfirmStep(
-                    record = uiState.record,
-                    objective = uiState.objective,
-                    subjective = uiState.subjective,
-                    validationErrors = uiState.validationErrors,
+            SectionCard(title = "冲煮参数") {
+                DropdownField(
+                    label = "制作方式",
+                    selectedLabel = uiState.objective.brewMethod?.displayName,
+                    options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
+                    onSelected = onMethodChange,
+                    modifier = Modifier.testTag("brew_method_dropdown"),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onStepChange(selectedStepIndex - 1) }) { Text("Back") }
-                    Button(
-                        onClick = onSubmit,
-                        modifier = Modifier.testTag("submit_record_button"),
-                    ) {
-                        Text("Submit")
+                DropdownField(
+                    label = "咖啡豆",
+                    selectedLabel = selectedBean?.name,
+                    options = uiState.beans.map { DropdownOption(it.name, it.id) },
+                    onSelected = onBeanChange,
+                    modifier = Modifier.testTag("bean_dropdown"),
+                )
+                AnimatedVisibility(visible = selectedBean != null) {
+                    selectedBean?.let { bean ->
+                        BeanIdentityCard(
+                            name = bean.name,
+                            roastLevel = bean.roastLevel,
+                            processMethod = bean.processMethod,
+                            roaster = bean.roaster,
+                        )
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ObjectiveStep(
-    uiState: RecordEditorUiState,
-    onMethodChange: (BrewMethod?) -> Unit,
-    onBeanChange: (Long?) -> Unit,
-    onGrinderChange: (Long?) -> Unit,
-    onGrindSettingChange: (String) -> Unit,
-    onCoffeeDoseChange: (String) -> Unit,
-    onBrewWaterChange: (String) -> Unit,
-    onBypassWaterChange: (String) -> Unit,
-    onWaterTempChange: (String) -> Unit,
-    onObjectiveNotesChange: (String) -> Unit,
-) {
-    SectionCard(title = "Objective inputs") {
-        DropdownField(
-            label = "Brew method",
-            selectedLabel = uiState.objective.brewMethod?.displayName,
-            options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
-            onSelected = onMethodChange,
-            modifier = Modifier.testTag("brew_method_dropdown"),
-        )
-        DropdownField(
-            label = "Bean",
-            selectedLabel = uiState.beans.firstOrNull { it.id == uiState.objective.beanProfileId }?.name,
-            options = uiState.beans.map { DropdownOption(it.name, it.id) },
-            onSelected = onBeanChange,
-            modifier = Modifier.testTag("bean_dropdown"),
-        )
-        DropdownField(
-            label = "Grinder",
-            selectedLabel = uiState.grinders.firstOrNull { it.id == uiState.objective.grinderProfileId }?.name,
-            options = uiState.grinders.map { DropdownOption(it.name, it.id) },
-            onSelected = onGrinderChange,
-        )
-        OutlinedTextField(
-            value = uiState.objective.grindSetting,
-            onValueChange = onGrindSettingChange,
-            label = { Text("Grind setting") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = uiState.objective.coffeeDoseG,
-            onValueChange = onCoffeeDoseChange,
-            label = { Text("Coffee dose (g)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = uiState.objective.brewWaterMl,
-            onValueChange = onBrewWaterChange,
-            label = { Text("Brew water (ml)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = uiState.objective.bypassWaterMl,
-            onValueChange = onBypassWaterChange,
-            label = { Text("Bypass water (ml)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = uiState.objective.waterTempC,
-            onValueChange = onWaterTempChange,
-            label = { Text("Water temp (C)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = uiState.objective.notes,
-            onValueChange = onObjectiveNotesChange,
-            label = { Text("Objective notes") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
-private fun SubjectiveStep(
-    uiState: RecordEditorUiState,
-    customTag: String,
-    onCustomTagChange: (String) -> Unit,
-    onAddCustomTag: () -> Unit,
-    onAromaChange: (Int?) -> Unit,
-    onAcidityChange: (Int?) -> Unit,
-    onSweetnessChange: (Int?) -> Unit,
-    onBitternessChange: (Int?) -> Unit,
-    onBodyChange: (Int?) -> Unit,
-    onAftertasteChange: (Int?) -> Unit,
-    onOverallChange: (Int?) -> Unit,
-    onSubjectiveNotesChange: (String) -> Unit,
-    onToggleTag: (FlavorTag) -> Unit,
-) {
-    SectionCard(title = "Subjective inputs") {
-        RatingSelector(label = "Aroma", value = uiState.subjective.aroma, range = 1..5, onSelected = onAromaChange)
-        RatingSelector(label = "Acidity", value = uiState.subjective.acidity, range = 1..5, onSelected = onAcidityChange)
-        RatingSelector(label = "Sweetness", value = uiState.subjective.sweetness, range = 1..5, onSelected = onSweetnessChange)
-        RatingSelector(label = "Bitterness", value = uiState.subjective.bitterness, range = 1..5, onSelected = onBitternessChange)
-        RatingSelector(label = "Body", value = uiState.subjective.body, range = 1..5, onSelected = onBodyChange)
-        RatingSelector(label = "Aftertaste", value = uiState.subjective.aftertaste, range = 1..5, onSelected = onAftertasteChange)
-        RatingSelector(label = "Overall", value = uiState.subjective.overall, range = 1..10, onSelected = onOverallChange)
-        TagSelector(
-            tags = uiState.flavorTags.map { it.name },
-            selected = uiState.subjective.tags.map { it.name }.toSet(),
-            onToggle = { name ->
-                uiState.flavorTags.firstOrNull { it.name == name }?.let(onToggleTag)
-            },
-        )
-        OutlinedTextField(
-            value = customTag,
-            onValueChange = onCustomTagChange,
-            label = { Text("Custom flavor tag") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(onClick = onAddCustomTag) {
-            Text("Add")
-        }
-        OutlinedTextField(
-            value = uiState.subjective.notes,
-            onValueChange = onSubjectiveNotesChange,
-            label = { Text("Subjective notes") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
-private fun ConfirmStep(
-    record: CoffeeRecord?,
-    objective: ObjectiveFormState,
-    subjective: SubjectiveFormState,
-    validationErrors: List<String>,
-) {
-    SectionCard(title = "Confirm submission") {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LabeledValue(label = "Method", value = objective.brewMethod?.displayName.orEmpty())
-            LabeledValue(label = "Bean", value = record?.beanNameSnapshot.orEmpty())
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LabeledValue(label = "Dose", value = "${objective.coffeeDoseG} g")
-            LabeledValue(label = "Brew water", value = "${objective.brewWaterMl} ml")
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LabeledValue(label = "Bypass", value = "${objective.bypassWaterMl} ml")
-            LabeledValue(label = "Water temp", value = "${objective.waterTempC} C")
-        }
-        LabeledValue(label = "Overall subjective", value = subjective.overall?.let { "$it / 10" }.orEmpty())
-        if (validationErrors.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "The following fields still need attention before submission:",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.error,
+                DropdownField(
+                    label = "磨豆机",
+                    selectedLabel = uiState.grinders.firstOrNull { it.id == uiState.objective.grinderProfileId }?.name,
+                    options = uiState.grinders.map { DropdownOption(it.name, it.id) },
+                    onSelected = onGrinderChange,
                 )
-                validationErrors.forEach { error ->
+                OutlinedTextField(
+                    value = uiState.objective.grindSetting,
+                    onValueChange = onGrindSettingChange,
+                    label = { Text("研磨格数") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = uiState.objective.coffeeDoseG,
+                    onValueChange = onCoffeeDoseChange,
+                    label = { Text("咖啡粉重量（g）") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = uiState.objective.brewWaterMl,
+                    onValueChange = onBrewWaterChange,
+                    label = { Text("冲煮水量（ml）") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = uiState.objective.bypassWaterMl,
+                    onValueChange = onBypassWaterChange,
+                    label = { Text("旁路水量（ml）") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                AnimatedVisibility(visible = uiState.objective.brewMethod?.isHotBrew != false) {
+                    OutlinedTextField(
+                        value = uiState.objective.waterTempC,
+                        onValueChange = onWaterTempChange,
+                        label = { Text("水温（°C）") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                OutlinedTextField(
+                    value = uiState.objective.notes,
+                    onValueChange = onObjectiveNotesChange,
+                    label = { Text("冲煮备注") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            SectionCard(title = "主观感受") {
+                RatingSelector(label = "香气", value = uiState.subjective.aroma, range = 1..5, onSelected = onAromaChange)
+                RatingSelector(label = "酸质", value = uiState.subjective.acidity, range = 1..5, onSelected = onAcidityChange)
+                RatingSelector(label = "甜感", value = uiState.subjective.sweetness, range = 1..5, onSelected = onSweetnessChange)
+                RatingSelector(label = "苦感", value = uiState.subjective.bitterness, range = 1..5, onSelected = onBitternessChange)
+                RatingSelector(label = "醇厚", value = uiState.subjective.body, range = 1..5, onSelected = onBodyChange)
+                RatingSelector(label = "余韵", value = uiState.subjective.aftertaste, range = 1..5, onSelected = onAftertasteChange)
+                RatingSelector(label = "总体评分", value = uiState.subjective.overall, range = 1..10, onSelected = onOverallChange)
+                TagSelector(
+                    tags = uiState.flavorTags.map { it.name },
+                    selected = uiState.subjective.tags.map { it.name }.toSet(),
+                    onToggle = { name ->
+                        uiState.flavorTags.firstOrNull { it.name == name }?.let(onToggleTag)
+                    },
+                )
+                OutlinedTextField(
+                    value = customTag,
+                    onValueChange = { customTag = it },
+                    label = { Text("自定义风味标签") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(onClick = {
+                    onAddCustomTag(customTag)
+                    customTag = ""
+                }) {
+                    Text("添加标签")
+                }
+                OutlinedTextField(
+                    value = uiState.subjective.notes,
+                    onValueChange = onSubjectiveNotesChange,
+                    label = { Text("主观备注") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            SectionCard(title = "提交前检查") {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LabeledValue(label = "制作方式", value = uiState.objective.brewMethod?.displayName.orEmpty())
+                    LabeledValue(label = "咖啡豆", value = selectedBean?.name.orEmpty())
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LabeledValue(label = "粉量", value = "${uiState.objective.coffeeDoseG} g")
+                    LabeledValue(label = "水量", value = "${uiState.objective.brewWaterMl} ml")
+                }
+                LabeledValue(label = "总体主观评分", value = uiState.subjective.overall?.let { "$it / 10" }.orEmpty())
+                AnimatedVisibility(visible = uiState.validationErrors.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "提交前还需要补充这些内容：",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        uiState.validationErrors.forEach { error ->
+                            Text(
+                                text = "- $error",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                }
+                if (uiState.validationErrors.isEmpty()) {
                     Text(
-                        text = "- $error",
-                        color = MaterialTheme.colorScheme.error,
+                        text = "你可以随时提交。即使现在不填写主观感受，这条记录也会先完整保存下来。",
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 }
             }
-        } else {
-            Text(
-                text = "Objective parameters are already saved. Subjective input remains optional for submission.",
-                style = MaterialTheme.typography.bodyLarge,
-            )
         }
     }
 }

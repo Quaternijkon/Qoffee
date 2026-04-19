@@ -1,9 +1,9 @@
 package com.qoffee.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.AutoGraph
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -12,10 +12,10 @@ sealed class TopLevelDestination(
     val label: String,
     val icon: ImageVector,
 ) {
-    data object Analytics : TopLevelDestination("analytics", "Analytics", Icons.Outlined.AutoGraph)
-    data object Records : TopLevelDestination("records", "Records", Icons.Outlined.MenuBook)
-    data object Catalog : TopLevelDestination("catalog", "Catalog", Icons.Outlined.Inventory2)
-    data object Settings : TopLevelDestination("settings", "Settings", Icons.Outlined.Settings)
+    data object Analytics : TopLevelDestination("analytics", "分析", Icons.Outlined.AutoGraph)
+    data object Records : TopLevelDestination("records", "记录", Icons.AutoMirrored.Outlined.MenuBook)
+    data object Catalog : TopLevelDestination("catalog", "资料库", Icons.Outlined.Inventory2)
+    data object Settings : TopLevelDestination("settings", "设置", Icons.Outlined.Settings)
 }
 
 object QoffeeDestinations {
