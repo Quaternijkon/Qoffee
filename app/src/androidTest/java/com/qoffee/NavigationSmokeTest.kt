@@ -1,8 +1,9 @@
 package com.qoffee
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import com.qoffee.ui.QoffeeTestTags
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Before
@@ -25,17 +26,14 @@ class NavigationSmokeTest {
 
     @Test
     fun topLevelNavigationShowsExpectedScreens() {
-        composeRule.onNodeWithText("分析")
-        composeRule.onNodeWithText("记录").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("记录筛选")
+        composeRule.onNodeWithTag(QoffeeTestTags.RECORDS_SCREEN).fetchSemanticsNode()
 
-        composeRule.onNodeWithText("资料库").performClick()
+        composeRule.onNodeWithTag(QoffeeTestTags.NAV_ANALYSIS).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("维护你的资料库")
+        composeRule.onNodeWithTag(QoffeeTestTags.ANALYSIS_SCREEN).fetchSemanticsNode()
 
-        composeRule.onNodeWithText("设置").performClick()
+        composeRule.onNodeWithTag(QoffeeTestTags.NAV_PROFILE).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("调整本地使用体验")
+        composeRule.onNodeWithTag(QoffeeTestTags.PROFILE_SCREEN).fetchSemanticsNode()
     }
 }

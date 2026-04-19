@@ -11,46 +11,61 @@ private val LightColors = lightColorScheme(
     primary = Espresso,
     onPrimary = Foam,
     secondary = Copper,
-    onSecondary = Mocha,
+    onSecondary = Graphite,
     tertiary = Sage,
-    background = Foam,
+    background = Linen,
     onBackground = Onyx,
-    surface = ColorTokens.SurfaceLight,
+    primaryContainer = Color(0xFF6A4025),
+    onPrimaryContainer = Foam,
+    secondaryContainer = Color(0xFFEED7BC),
+    onSecondaryContainer = Onyx,
+    tertiaryContainer = Color(0xFFD7E4D9),
+    onTertiaryContainer = Graphite,
+    surface = Foam,
     onSurface = Onyx,
-    surfaceVariant = ColorTokens.SurfaceVariantLight,
+    surfaceVariant = Color(0xFFEBDCCB),
     onSurfaceVariant = Dust,
+    outline = Color(0xFFD0BDA7),
+    outlineVariant = Color(0xFFE0D3C6),
+    error = Ember,
+    errorContainer = Color(0xFFF2DBD3),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Latte,
-    onPrimary = Mocha,
+    primary = CopperBright,
+    onPrimary = Graphite,
     secondary = Copper,
-    onSecondary = Onyx,
+    onSecondary = Graphite,
     tertiary = Sage,
-    background = ColorTokens.BackgroundDark,
+    primaryContainer = Mocha,
+    onPrimaryContainer = Foam,
+    secondaryContainer = Color(0xFF403025),
+    onSecondaryContainer = Foam,
+    tertiaryContainer = Color(0xFF314238),
+    onTertiaryContainer = Foam,
+    background = Graphite,
     onBackground = Foam,
-    surface = ColorTokens.SurfaceDark,
+    surface = Color(0xFF1B1715),
     onSurface = Foam,
-    surfaceVariant = ColorTokens.SurfaceVariantDark,
-    onSurfaceVariant = Crema,
+    surfaceVariant = Color(0xFF27211D),
+    onSurfaceVariant = Smoke,
+    outline = Color(0xFF65574D),
+    outlineVariant = Color(0xFF433832),
+    error = Color(0xFFF0A38E),
+    errorContainer = Color(0xFF5A2B23),
 )
-
-private object ColorTokens {
-    val SurfaceLight = Crema
-    val SurfaceVariantLight = Latte
-    val BackgroundDark = Color(0xFF16110E)
-    val SurfaceDark = Color(0xFF261B16)
-    val SurfaceVariantDark = Color(0xFF3A2B24)
-}
 
 @Composable
 fun QoffeeTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = QoffeeTypography,
-        content = content,
-    )
+    ProvideQoffeeDashboardTokens(darkTheme = darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = QoffeeTypography,
+            shapes = QoffeeShapes,
+            content = content,
+        )
+    }
 }

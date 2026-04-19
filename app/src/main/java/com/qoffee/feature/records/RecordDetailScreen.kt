@@ -2,13 +2,12 @@ package com.qoffee.feature.records
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -23,11 +22,15 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.qoffee.core.model.AnalysisFilter
+import com.qoffee.core.model.AnalysisTimeRange
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.ui.components.DashboardPage
 import com.qoffee.ui.components.EmptyStateCard
-import com.qoffee.ui.components.HeroCard
 import com.qoffee.ui.components.LabeledValue
+import com.qoffee.ui.components.MetricCard
+import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.StatChip
 import com.qoffee.ui.navigation.QoffeeDestinations
@@ -38,7 +41,14 @@ import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+
+data class RecordDetailUiState(
+    val record: CoffeeRecord? = null,
+    val comparison: RecordComparisonSummary? = null,
+    val beanHistorySummary: String? = null,
+)
 
 @HiltViewModel
 class RecordDetailViewModel @Inject constructor(
@@ -47,10 +57,25 @@ class RecordDetailViewModel @Inject constructor(
 ) : ViewModel() {
     private val recordId = checkNotNull(savedStateHandle.get<Long>(QoffeeDestinations.recordIdArg))
 
-    val record: StateFlow<CoffeeRecord?> = recordRepository.observeRecord(recordId).stateIn(
+    val uiState: StateFlow<RecordDetailUiState> = combine(
+        recordRepository.observeRecord(recordId),
+        recordRepository.observeRecords(AnalysisFilter(timeRange = AnalysisTimeRange.ALL)),
+    ) { record, allRecords ->
+        RecordDetailUiState(
+            record = record,
+            comparison = record?.let { current ->
+                findPreviousComparableRecord(allRecords, current)?.let { previous ->
+                    buildComparisonSummary(current, previous)
+                }
+            },
+            beanHistorySummary = record?.beanProfileId?.let { beanId ->
+                buildBeanHistorySummary(allRecords, beanId)
+            },
+        )
+    }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = null,
+        initialValue = RecordDetailUiState(),
     )
 }
 
@@ -63,10 +88,10 @@ fun RecordDetailRoute(
     isReadOnlyArchive: Boolean,
     viewModel: RecordDetailViewModel = hiltViewModel(),
 ) {
-    val record by viewModel.record.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     RecordDetailScreen(
         paddingValues = paddingValues,
-        record = record,
+        uiState = uiState,
         isReadOnlyArchive = isReadOnlyArchive,
         onBack = onBack,
         onEdit = onEdit,
@@ -74,15 +99,17 @@ fun RecordDetailRoute(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RecordDetailScreen(
     paddingValues: PaddingValues,
-    record: CoffeeRecord?,
+    uiState: RecordDetailUiState,
     isReadOnlyArchive: Boolean,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onDuplicate: (Long) -> Unit,
 ) {
+    val record = uiState.record
     if (record == null) {
         EmptyStateCard(
             title = "未找到这条记录",
@@ -93,58 +120,75 @@ private fun RecordDetailScreen(
     }
 
     val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA) }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        HeroCard(
+
+    DashboardPage(paddingValues = paddingValues) {
+        PageHeader(
             title = record.beanNameSnapshot ?: (record.brewMethod?.displayName ?: "咖啡记录"),
-            subtitle = "${record.brewMethod?.displayName ?: "未指定方式"} | ${formatter.format(Date(record.brewedAt))}",
+            subtitle = "${record.brewMethod?.displayName ?: "未指定方式"} · ${formatter.format(Date(record.brewedAt))}",
+            eyebrow = "QOFFEE / CUP REPORT",
         )
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onBack) { Text("返回") }
             if (!isReadOnlyArchive) {
                 Button(onClick = { onEdit(record.id) }) { Text("编辑") }
-                OutlinedButton(onClick = { onDuplicate(record.id) }) { Text("复制") }
+                OutlinedButton(onClick = { onDuplicate(record.id) }) { Text("再冲一杯") }
             }
         }
 
-        SectionCard(title = "客观参数") {
+        SectionCard(
+            title = "本次记录",
+            subtitle = "先看这一杯的核心客观参数，再结合主观结果判断是否值得复用。",
+        ) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "制作方式", value = record.brewMethod?.displayName.orEmpty())
-                LabeledValue(label = "咖啡豆", value = record.beanNameSnapshot.orEmpty())
+                MetricCard(
+                    label = "总分",
+                    value = record.subjectiveEvaluation?.overall?.toString() ?: "--",
+                    supporting = "主观总体评分",
+                    modifier = Modifier.weight(1f),
+                )
+                MetricCard(
+                    label = "粉水比",
+                    value = record.brewRatio?.let { String.format(Locale.CHINA, "%.1f", it) } ?: "--",
+                    supporting = "客观冲煮比值",
+                    modifier = Modifier.weight(1f),
+                )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "磨豆机", value = record.grinderNameSnapshot.orEmpty())
-                LabeledValue(label = "研磨格数", value = record.grindSetting?.toString().orEmpty())
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "粉量", value = "${record.coffeeDoseG ?: ""} g")
-                LabeledValue(label = "冲煮水量", value = "${record.brewWaterMl ?: ""} ml")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "旁路水量", value = "${record.bypassWaterMl ?: ""} ml")
-                LabeledValue(label = "水温", value = "${record.waterTempC ?: ""} °C")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                record.totalWaterMl?.let { StatChip(text = "总水量 ${it} ml") }
-                record.brewRatio?.let { StatChip(text = "粉水比 ${"%.1f".format(it)}") }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 record.beanRoastLevelSnapshot?.let { StatChip(text = it.displayName) }
+                record.beanProcessMethodSnapshot?.let { StatChip(text = it.displayName) }
+                record.recipeNameSnapshot?.let { StatChip(text = "配方 $it") }
+                record.grinderNameSnapshot?.let { StatChip(text = it) }
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LabeledValue(label = "粉量", value = record.coffeeDoseG?.let { "${formatNumber(it)} g" }.orEmpty())
+                LabeledValue(label = "水量", value = record.brewWaterMl?.let { "${formatNumber(it)} ml" }.orEmpty())
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LabeledValue(label = "水温", value = record.waterTempC?.let { "${formatNumber(it)} °C" }.orEmpty())
+                LabeledValue(label = "研磨", value = record.grindSetting?.let(::formatNumber).orEmpty())
+            }
+            LabeledValue(
+                label = "咖啡豆",
+                value = record.beanNameSnapshot.orEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            )
             if (record.notes.isNotBlank()) {
                 Text(
                     text = record.notes,
                     style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        SectionCard(title = "主观感受") {
+        SectionCard(
+            title = "主观感受",
+            subtitle = "把各维度评分、风味标签和文字备注整合成复盘结果。",
+        ) {
             if (record.subjectiveEvaluation == null || record.subjectiveEvaluation.isEmpty()) {
                 Text(
                     text = "这条记录还没有填写主观感受。",
@@ -162,21 +206,53 @@ private fun RecordDetailScreen(
                     LabeledValue(label = "醇厚", value = evaluation.body?.toString().orEmpty())
                     LabeledValue(label = "余韵", value = evaluation.aftertaste?.toString().orEmpty())
                 }
-                LabeledValue(label = "总体评分", value = evaluation.overall?.let { "$it / 10" }.orEmpty())
                 if (evaluation.flavorTags.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        evaluation.flavorTags.forEach { tag ->
-                            StatChip(text = tag.name)
-                        }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        evaluation.flavorTags.forEach { tag -> StatChip(text = tag.name) }
                     }
                 }
                 if (evaluation.notes.isNotBlank()) {
                     Text(
                         text = evaluation.notes,
                         style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         }
+
+        uiState.comparison?.let { comparison ->
+            SectionCard(
+                title = "和上一杯相比",
+                subtitle = "快速判断这次调整是否产生了正向变化。",
+            ) {
+                Text(text = comparison.headline, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = comparison.details.joinToString(" · "),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        uiState.beanHistorySummary?.let { summary ->
+            SectionCard(
+                title = "同豆历史表现",
+                subtitle = "把这支豆子的长期表现放到当前复盘语境里。",
+            ) {
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
+}
+
+private fun formatNumber(value: Double): String {
+    return String.format(Locale.CHINA, "%.1f", value).trimEnd('0').trimEnd('.')
 }

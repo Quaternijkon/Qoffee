@@ -177,6 +177,25 @@ data class GrinderProfile(
     val createdAt: Long = 0L,
 )
 
+data class RecipeTemplate(
+    val id: Long = 0L,
+    val archiveId: Long = 0L,
+    val name: String,
+    val brewMethod: BrewMethod? = null,
+    val beanProfileId: Long? = null,
+    val beanNameSnapshot: String? = null,
+    val grinderProfileId: Long? = null,
+    val grinderNameSnapshot: String? = null,
+    val grindSetting: Double? = null,
+    val coffeeDoseG: Double? = null,
+    val brewWaterMl: Double? = null,
+    val bypassWaterMl: Double? = null,
+    val waterTempC: Double? = null,
+    val notes: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+)
+
 data class FlavorTag(
     val id: Long = 0L,
     val archiveId: Long = 0L,
@@ -218,6 +237,8 @@ data class CoffeeRecord(
     val beanNameSnapshot: String? = null,
     val beanRoastLevelSnapshot: RoastLevel? = null,
     val beanProcessMethodSnapshot: BeanProcessMethod? = null,
+    val recipeTemplateId: Long? = null,
+    val recipeNameSnapshot: String? = null,
     val grinderProfileId: Long? = null,
     val grinderNameSnapshot: String? = null,
     val grindSetting: Double? = null,
@@ -239,6 +260,8 @@ data class CoffeeRecord(
 }
 
 data class ObjectiveDraftUpdate(
+    val recipeTemplateId: Long? = null,
+    val recipeNameSnapshot: String? = null,
     val brewMethod: BrewMethod? = null,
     val beanProfileId: Long? = null,
     val grinderProfileId: Long? = null,

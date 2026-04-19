@@ -12,7 +12,14 @@ import kotlinx.coroutines.flow.Flow
 interface ArchiveDao {
     @Query(
         """
-        SELECT a.*,
+        SELECT
+               a.id AS id,
+               a.name AS name,
+               a.typeCode AS typeCode,
+               a.isReadOnly AS isReadOnly,
+               a.createdAt AS createdAt,
+               a.updatedAt AS updatedAt,
+               a.sortOrder AS sortOrder,
                (SELECT COUNT(*) FROM bean_profiles b WHERE b.archiveId = a.id) AS beanCount,
                (SELECT COUNT(*) FROM grinder_profiles g WHERE g.archiveId = a.id) AS grinderCount,
                (SELECT COUNT(*) FROM brew_records r WHERE r.archiveId = a.id AND r.status = 'completed') AS recordCount,
@@ -82,6 +89,27 @@ interface GrinderProfileDao {
 }
 
 @Dao
+interface RecipeTemplateDao {
+    @Query("SELECT * FROM recipe_templates WHERE archiveId = :archiveId ORDER BY updatedAt DESC, createdAt DESC")
+    fun observeByArchive(archiveId: Long): Flow<List<RecipeTemplateEntity>>
+
+    @Query("SELECT * FROM recipe_templates WHERE archiveId = :archiveId ORDER BY updatedAt DESC, createdAt DESC")
+    suspend fun getAllByArchive(archiveId: Long): List<RecipeTemplateEntity>
+
+    @Query("SELECT * FROM recipe_templates WHERE id = :id")
+    suspend fun getById(id: Long): RecipeTemplateEntity?
+
+    @Insert
+    suspend fun insert(entity: RecipeTemplateEntity): Long
+
+    @Update
+    suspend fun update(entity: RecipeTemplateEntity)
+
+    @Query("DELETE FROM recipe_templates WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}
+
+@Dao
 interface BrewRecordDao {
     @Transaction
     @Query(
@@ -94,6 +122,17 @@ interface BrewRecordDao {
         """,
     )
     fun observeAll(archiveId: Long): Flow<List<BrewRecordWithRelations>>
+
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM brew_records
+        WHERE archiveId = :archiveId AND status = 'completed'
+        ORDER BY brewedAt DESC, updatedAt DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeRecentCompleted(archiveId: Long, limit: Int): Flow<List<BrewRecordWithRelations>>
 
     @Transaction
     @Query(
@@ -112,6 +151,26 @@ interface BrewRecordDao {
     @Transaction
     @Query("SELECT * FROM brew_records WHERE id = :id")
     suspend fun getById(id: Long): BrewRecordWithRelations?
+
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM brew_records
+        WHERE archiveId = :archiveId
+          AND status = 'completed'
+          AND (:beanId IS NULL OR beanId = :beanId)
+          AND (:brewMethodCode IS NULL OR brewMethodCode = :brewMethodCode)
+          AND (:excludingRecordId IS NULL OR id != :excludingRecordId)
+        ORDER BY brewedAt DESC, updatedAt DESC
+        LIMIT 1
+        """,
+    )
+    suspend fun getLatestComparable(
+        archiveId: Long,
+        beanId: Long?,
+        brewMethodCode: String?,
+        excludingRecordId: Long?,
+    ): BrewRecordWithRelations?
 
     @Query("SELECT * FROM brew_records WHERE id = :id")
     suspend fun getEntityById(id: Long): BrewRecordEntity?

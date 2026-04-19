@@ -9,6 +9,7 @@ import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.FlavorTag
 import com.qoffee.core.model.GrinderProfile
+import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RoastLevel
 import com.qoffee.core.model.SubjectiveEvaluation
@@ -19,6 +20,7 @@ import com.qoffee.data.local.BrewRecordEntity
 import com.qoffee.data.local.BrewRecordWithRelations
 import com.qoffee.data.local.FlavorTagEntity
 import com.qoffee.data.local.GrinderProfileEntity
+import com.qoffee.data.local.RecipeTemplateEntity
 import com.qoffee.data.local.SubjectiveEvaluationEntity
 
 fun ArchiveEntity.toDomain() = Archive(
@@ -91,6 +93,44 @@ fun GrinderProfile.toEntity() = GrinderProfileEntity(
     createdAt = createdAt,
 )
 
+fun RecipeTemplateEntity.toDomain() = RecipeTemplate(
+    id = id,
+    archiveId = archiveId,
+    name = name,
+    brewMethod = BrewMethod.fromCode(brewMethodCode),
+    beanProfileId = beanId,
+    beanNameSnapshot = beanNameSnapshot,
+    grinderProfileId = grinderId,
+    grinderNameSnapshot = grinderNameSnapshot,
+    grindSetting = grindSetting,
+    coffeeDoseG = coffeeDoseG,
+    brewWaterMl = brewWaterMl,
+    bypassWaterMl = bypassWaterMl,
+    waterTempC = waterTempC,
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun RecipeTemplate.toEntity() = RecipeTemplateEntity(
+    id = id,
+    archiveId = archiveId,
+    name = name,
+    brewMethodCode = brewMethod?.code,
+    beanId = beanProfileId,
+    beanNameSnapshot = beanNameSnapshot,
+    grinderId = grinderProfileId,
+    grinderNameSnapshot = grinderNameSnapshot,
+    grindSetting = grindSetting,
+    coffeeDoseG = coffeeDoseG,
+    brewWaterMl = brewWaterMl,
+    bypassWaterMl = bypassWaterMl,
+    waterTempC = waterTempC,
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
 fun FlavorTagEntity.toDomain() = FlavorTag(
     id = id,
     archiveId = archiveId,
@@ -136,6 +176,8 @@ fun BrewRecordEntity.toDomain(
     beanNameSnapshot = beanNameSnapshot,
     beanRoastLevelSnapshot = beanRoastLevelSnapshotValue?.let(RoastLevel::fromStorageValue),
     beanProcessMethodSnapshot = beanProcessMethodSnapshotValue?.let(BeanProcessMethod::fromStorageValue),
+    recipeTemplateId = recipeTemplateId,
+    recipeNameSnapshot = recipeNameSnapshot,
     grinderProfileId = grinderId,
     grinderNameSnapshot = grinderNameSnapshot,
     grindSetting = grindSetting,

@@ -78,6 +78,53 @@ data class GrinderProfileEntity(
 )
 
 @Entity(
+    tableName = "recipe_templates",
+    foreignKeys = [
+        ForeignKey(
+            entity = ArchiveEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["archiveId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = BeanProfileEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["beanId"],
+            onDelete = ForeignKey.SET_NULL,
+        ),
+        ForeignKey(
+            entity = GrinderProfileEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["grinderId"],
+            onDelete = ForeignKey.SET_NULL,
+        ),
+    ],
+    indices = [
+        Index("archiveId"),
+        Index("beanId"),
+        Index("grinderId"),
+    ],
+)
+data class RecipeTemplateEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val archiveId: Long,
+    val name: String,
+    val brewMethodCode: String?,
+    val beanId: Long?,
+    val beanNameSnapshot: String?,
+    val grinderId: Long?,
+    val grinderNameSnapshot: String?,
+    val grindSetting: Double?,
+    val coffeeDoseG: Double?,
+    val brewWaterMl: Double?,
+    val bypassWaterMl: Double?,
+    val waterTempC: Double?,
+    val notes: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
     tableName = "brew_records",
     foreignKeys = [
         ForeignKey(
@@ -105,6 +152,7 @@ data class GrinderProfileEntity(
         Index("brewedAt"),
         Index("beanId"),
         Index("grinderId"),
+        Index("recipeTemplateId"),
     ],
 )
 data class BrewRecordEntity(
@@ -116,6 +164,8 @@ data class BrewRecordEntity(
     val beanNameSnapshot: String?,
     val beanRoastLevelSnapshotValue: Int?,
     val beanProcessMethodSnapshotValue: Int?,
+    val recipeTemplateId: Long? = null,
+    val recipeNameSnapshot: String? = null,
     val grinderId: Long?,
     val grinderNameSnapshot: String?,
     val grindSetting: Double?,

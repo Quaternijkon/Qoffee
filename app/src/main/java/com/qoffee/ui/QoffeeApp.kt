@@ -1,31 +1,34 @@
 package com.qoffee.ui
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.FolderCopy
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,7 +36,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,14 +56,22 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.qoffee.core.model.ArchiveSummary
-import com.qoffee.feature.analytics.AnalyticsRoute
-import com.qoffee.feature.catalog.CatalogRoute
+import com.qoffee.feature.analytics.AnalysisRoute
+import com.qoffee.feature.profile.BeanEditorRoute
+import com.qoffee.feature.profile.GrinderEditorRoute
+import com.qoffee.feature.profile.ProfileRoute
+import com.qoffee.feature.profile.RecipeEditorRoute
 import com.qoffee.feature.records.RecordDetailRoute
 import com.qoffee.feature.records.RecordEditorRoute
 import com.qoffee.feature.records.RecordsRoute
-import com.qoffee.feature.settings.SettingsRoute
+import com.qoffee.ui.components.SectionCard
+import com.qoffee.ui.components.StatChip
 import com.qoffee.ui.navigation.QoffeeDestinations
+import com.qoffee.ui.navigation.RecordEditorEntry
 import com.qoffee.ui.navigation.TopLevelDestination
+import com.qoffee.ui.theme.QoffeeDashboardTheme
+import com.qoffee.ui.theme.qoffeeBottomShellBrush
+import com.qoffee.ui.theme.qoffeePageBackgroundBrush
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,90 +83,52 @@ fun QoffeeApp(
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
     val topLevelDestinations = listOf(
-        TopLevelDestination.Analytics,
         TopLevelDestination.Records,
-        TopLevelDestination.Catalog,
-        TopLevelDestination.Settings,
+        TopLevelDestination.Analysis,
+        TopLevelDestination.Profile,
     )
     val currentArchive = appUiState.currentArchive
-    val currentTopLevel = topLevelDestinations.firstOrNull { destination ->
-        currentDestination?.hierarchy?.any { it.route == destination.route } == true
-    }
     val showBottomBar = currentDestination?.isTopLevel(topLevelDestinations) == true
-    val showFab = showBottomBar &&
-        currentTopLevel != TopLevelDestination.Settings &&
-        currentArchive?.archive?.isReadOnly != true
 
     var showArchiveSheet by remember { mutableStateOf(false) }
     var showCreateArchiveDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<ArchiveSummary?>(null) }
     var deleteTarget by remember { mutableStateOf<ArchiveSummary?>(null) }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Column {
-                        Text(text = currentTopLevel?.label ?: "Qoffee")
-                        Text(
-                            text = currentArchive?.archive?.name ?: "正在准备存档",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showArchiveSheet = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Inventory2,
-                            contentDescription = "切换存档",
-                        )
-                    }
-                },
-            )
-        },
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    topLevelDestinations.forEach { destination ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(brush = qoffeePageBackgroundBrush()),
+    ) {
+        DashboardBackdrop()
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            bottomBar = {
+                if (showBottomBar && currentDestination != null) {
+                    DashboardNavigationBar(
+                        currentDestination = currentDestination,
+                        destinations = topLevelDestinations,
+                        onNavigate = { destination ->
+                            navController.navigate(destination.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
                                 }
-                            },
-                            icon = { Icon(destination.icon, contentDescription = destination.label) },
-                            label = { Text(destination.label) },
-                        )
-                    }
-                }
-            }
-        },
-        floatingActionButton = {
-            if (showFab) {
-                FloatingActionButton(
-                    onClick = { navController.navigate(QoffeeDestinations.recordEditor()) },
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = "新建记录",
-                        modifier = Modifier.size(24.dp),
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
                     )
                 }
-            }
-        },
-    ) { paddingValues ->
-        QoffeeNavHost(
-            paddingValues = paddingValues,
-            navController = navController,
-            currentArchive = currentArchive,
-        )
+            },
+        ) { paddingValues ->
+            QoffeeNavHost(
+                paddingValues = paddingValues,
+                navController = navController,
+                currentArchive = currentArchive,
+                onOpenArchiveSheet = { showArchiveSheet = true },
+            )
+        }
     }
 
     if (showArchiveSheet) {
@@ -236,39 +214,56 @@ private fun QoffeeNavHost(
     paddingValues: PaddingValues,
     navController: NavHostController,
     currentArchive: ArchiveSummary?,
+    onOpenArchiveSheet: () -> Unit,
 ) {
     NavHost(
         navController = navController,
-        startDestination = TopLevelDestination.Analytics.route,
+        startDestination = TopLevelDestination.Records.route,
     ) {
-        composable(TopLevelDestination.Analytics.route) {
-            AnalyticsRoute(
+        composable(TopLevelDestination.Records.route) {
+            RecordsRoute(
+                paddingValues = paddingValues,
+                currentArchive = currentArchive,
+                onOpenDetail = { recordId ->
+                    navController.navigate(QoffeeDestinations.recordDetail(recordId))
+                },
+                onOpenEditor = { recordId, duplicateFrom, entry, recipeId ->
+                    navController.navigate(
+                        QoffeeDestinations.recordEditor(
+                            recordId = recordId,
+                            duplicateFrom = duplicateFrom,
+                            entry = entry,
+                            recipeId = recipeId,
+                        ),
+                    )
+                },
+                isReadOnlyArchive = currentArchive?.archive?.isReadOnly == true,
+            )
+        }
+        composable(TopLevelDestination.Analysis.route) {
+            AnalysisRoute(
                 paddingValues = paddingValues,
                 onOpenRecord = { recordId ->
                     navController.navigate(QoffeeDestinations.recordDetail(recordId))
                 },
             )
         }
-        composable(TopLevelDestination.Records.route) {
-            RecordsRoute(
+        composable(TopLevelDestination.Profile.route) {
+            ProfileRoute(
                 paddingValues = paddingValues,
-                onOpenDetail = { recordId ->
-                    navController.navigate(QoffeeDestinations.recordDetail(recordId))
-                },
-                onOpenEditor = { recordId, duplicateFrom ->
-                    navController.navigate(QoffeeDestinations.recordEditor(recordId, duplicateFrom))
-                },
+                currentArchive = currentArchive,
                 isReadOnlyArchive = currentArchive?.archive?.isReadOnly == true,
+                onOpenArchiveSheet = onOpenArchiveSheet,
+                onOpenBeanEditor = { beanId ->
+                    navController.navigate(QoffeeDestinations.beanEditor(beanId))
+                },
+                onOpenGrinderEditor = { grinderId ->
+                    navController.navigate(QoffeeDestinations.grinderEditor(grinderId))
+                },
+                onOpenRecipeEditor = { recipeId ->
+                    navController.navigate(QoffeeDestinations.recipeEditor(recipeId))
+                },
             )
-        }
-        composable(TopLevelDestination.Catalog.route) {
-            CatalogRoute(
-                paddingValues = paddingValues,
-                isReadOnlyArchive = currentArchive?.archive?.isReadOnly == true,
-            )
-        }
-        composable(TopLevelDestination.Settings.route) {
-            SettingsRoute(paddingValues = paddingValues)
         }
         composable(
             route = QoffeeDestinations.recordEditorPattern,
@@ -278,6 +273,14 @@ private fun QoffeeNavHost(
                     defaultValue = -1L
                 },
                 navArgument(QoffeeDestinations.duplicateFromArg) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+                navArgument(QoffeeDestinations.recordEntryArg) {
+                    type = NavType.StringType
+                    defaultValue = RecordEditorEntry.NEW.value
+                },
+                navArgument(QoffeeDestinations.recipeIdArg) {
                     type = NavType.LongType
                     defaultValue = -1L
                 },
@@ -296,6 +299,51 @@ private fun QoffeeNavHost(
             )
         }
         composable(
+            route = QoffeeDestinations.beanEditorPattern,
+            arguments = listOf(
+                navArgument(QoffeeDestinations.beanIdArg) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+            ),
+        ) {
+            BeanEditorRoute(
+                paddingValues = paddingValues,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = QoffeeDestinations.grinderEditorPattern,
+            arguments = listOf(
+                navArgument(QoffeeDestinations.grinderIdArg) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+            ),
+        ) {
+            GrinderEditorRoute(
+                paddingValues = paddingValues,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = QoffeeDestinations.recipeEditorPattern,
+            arguments = listOf(
+                navArgument(QoffeeDestinations.recipeIdArg) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+            ),
+        ) {
+            RecipeEditorRoute(
+                paddingValues = paddingValues,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable(
             route = QoffeeDestinations.recordDetailPattern,
             arguments = listOf(
                 navArgument(QoffeeDestinations.recordIdArg) {
@@ -307,10 +355,20 @@ private fun QoffeeNavHost(
                 paddingValues = paddingValues,
                 onBack = { navController.popBackStack() },
                 onEdit = { recordId ->
-                    navController.navigate(QoffeeDestinations.recordEditor(recordId = recordId))
+                    navController.navigate(
+                        QoffeeDestinations.recordEditor(
+                            recordId = recordId,
+                            entry = RecordEditorEntry.DRAFT,
+                        ),
+                    )
                 },
                 onDuplicate = { recordId ->
-                    navController.navigate(QoffeeDestinations.recordEditor(duplicateFrom = recordId))
+                    navController.navigate(
+                        QoffeeDestinations.recordEditor(
+                            duplicateFrom = recordId,
+                            entry = RecordEditorEntry.DUPLICATE,
+                        ),
+                    )
                 },
                 isReadOnlyArchive = currentArchive?.archive?.isReadOnly == true,
             )
@@ -332,20 +390,43 @@ private fun ArchiveSheet(
     onCopyDemo: () -> Unit,
     onResetDemo: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = QoffeeDashboardTheme.colors.panel,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("切换存档", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Surface(
+                    color = QoffeeDashboardTheme.colors.accentSoft,
+                    shape = CircleShape,
+                    modifier = Modifier.size(12.dp),
+                ) {}
+                Text("切换存档", style = MaterialTheme.typography.headlineMedium)
+            }
             currentArchive?.let { archive ->
-                Text(
-                    text = "当前：${archive.archive.name}",
-                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                )
+                SectionCard(
+                    title = "当前会话",
+                    subtitle = "所有记录、配方和设备都会绑定到当前存档。",
+                ) {
+                    Text(
+                        text = archive.archive.name,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatChip(text = archive.archive.type.displayName)
+                        StatChip(text = "记录 ${archive.recordCount}")
+                        StatChip(text = "豆子 ${archive.beanCount}")
+                    }
+                }
                 if (archive.isDemo) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = onCopyDemo) {
@@ -360,33 +441,24 @@ private fun ArchiveSheet(
                 }
             }
             archives.forEach { archive ->
-                androidx.compose.material3.Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = androidx.compose.material3.CardDefaults.cardColors(
-                        containerColor = if (archive.archive.id == currentArchive?.archive?.id) {
-                            androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow
-                        },
-                    ),
+                SectionCard(
+                    title = archive.archive.name,
+                    subtitle = "${archive.archive.type.displayName} · 豆 ${archive.beanCount} · 磨豆机 ${archive.grinderCount} · 记录 ${archive.recordCount}",
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(text = archive.archive.name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = "${archive.archive.type.displayName} | 豆 ${archive.beanCount} | 磨豆机 ${archive.grinderCount} | 记录 ${archive.recordCount}",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { onSwitch(archive.archive.id) }) { Text("切换") }
-                            OutlinedButton(onClick = { onDuplicateArchive(archive) }) { Text("复制") }
-                            if (!archive.archive.isReadOnly) {
-                                OutlinedButton(onClick = { onRenameArchive(archive) }) { Text("重命名") }
-                                TextButton(onClick = { onDeleteArchive(archive) }) { Text("删除") }
-                            }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (archive.archive.id == currentArchive?.archive?.id) {
+                            StatChip(text = "当前存档")
+                        }
+                        archive.lastRecordAt?.let {
+                            StatChip(text = "最近活跃")
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onSwitch(archive.archive.id) }) { Text("切换") }
+                        OutlinedButton(onClick = { onDuplicateArchive(archive) }) { Text("复制") }
+                        if (!archive.archive.isReadOnly) {
+                            OutlinedButton(onClick = { onRenameArchive(archive) }) { Text("重命名") }
+                            TextButton(onClick = { onDeleteArchive(archive) }) { Text("删除") }
                         }
                     }
                 }
@@ -436,4 +508,97 @@ private fun ArchiveNameDialog(
 
 private fun NavDestination.isTopLevel(destinations: List<TopLevelDestination>): Boolean {
     return hierarchy.any { destination -> destinations.any { it.route == destination.route } }
+}
+
+@Composable
+private fun DashboardBackdrop() {
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        drawCircle(
+            color = dashboardColors.ambientGlow,
+            radius = size.width * 0.48f,
+            center = Offset(size.width * 0.82f, size.height * 0.12f),
+        )
+        drawCircle(
+            color = dashboardColors.ambientGlowSecondary,
+            radius = size.width * 0.38f,
+            center = Offset(size.width * 0.18f, size.height * 0.46f),
+        )
+        drawCircle(
+            color = dashboardColors.accentGlow,
+            radius = size.width * 0.30f,
+            center = Offset(size.width * 0.55f, size.height * 0.88f),
+        )
+    }
+}
+
+@Composable
+private fun DashboardNavigationBar(
+    currentDestination: NavDestination,
+    destinations: List<TopLevelDestination>,
+    onNavigate: (TopLevelDestination) -> Unit,
+) {
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(brush = qoffeeBottomShellBrush()),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(dashboardColors.shellDivider.copy(alpha = 0.72f)),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(dashboardColors.shellElevated)
+                .navigationBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            destinations.forEach { destination ->
+                val selected = currentDestination.hierarchy.any { it.route == destination.route }
+                val containerColor = if (selected) {
+                    dashboardColors.accentSoft.copy(alpha = 0.56f)
+                } else {
+                    Color.Transparent
+                }
+                val contentColor = if (selected) {
+                    dashboardColors.titleText
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+
+                Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(containerColor)
+                            .testTag(destination.testTag),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigate(destination) }
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Icon(
+                            imageVector = destination.icon,
+                            contentDescription = destination.label,
+                            tint = if (selected) MaterialTheme.colorScheme.primary else contentColor,
+                        )
+                        Text(
+                            text = destination.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = contentColor,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

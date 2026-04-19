@@ -6,10 +6,12 @@ import com.qoffee.core.model.AnalysisTimeRange
 import com.qoffee.core.model.ArchiveSeedStatus
 import com.qoffee.core.model.ArchiveSummary
 import com.qoffee.core.model.BeanProfile
+import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.FlavorTag
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.ObjectiveDraftUpdate
+import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordValidationResult
 import com.qoffee.core.model.SubjectiveEvaluation
 import com.qoffee.core.model.UserSettings
@@ -41,12 +43,25 @@ interface CatalogRepository {
     suspend fun seedPresetFlavorTags()
 }
 
+interface RecipeRepository {
+    fun observeRecipes(): Flow<List<RecipeTemplate>>
+    suspend fun getRecipe(id: Long): RecipeTemplate?
+    suspend fun saveRecipe(template: RecipeTemplate): Long
+    suspend fun deleteRecipe(id: Long)
+}
+
 interface RecordRepository {
     fun observeRecords(filter: AnalysisFilter = AnalysisFilter(timeRange = AnalysisTimeRange.ALL)): Flow<List<CoffeeRecord>>
+    fun observeRecentRecords(limit: Int): Flow<List<CoffeeRecord>>
     fun observeRecord(recordId: Long): Flow<CoffeeRecord?>
     suspend fun getRecord(recordId: Long): CoffeeRecord?
     suspend fun getActiveDraftId(): Long?
     suspend fun getOrCreateActiveDraftId(autoRestore: Boolean = true): Long
+    suspend fun createEmptyDraft(replaceActiveDraft: Boolean = false): Long
+    suspend fun createDraftFromRecipe(recipeId: Long, replaceActiveDraft: Boolean = false): Long
+    suspend fun applyRecipeToDraft(recordId: Long, recipeId: Long)
+    suspend fun getLatestComparableRecord(beanId: Long?, brewMethod: BrewMethod?, excludingRecordId: Long? = null): CoffeeRecord?
+    suspend fun duplicateLatestComparableAsDraft(beanId: Long?, brewMethod: BrewMethod?): Long?
     suspend fun updateObjective(recordId: Long, update: ObjectiveDraftUpdate)
     suspend fun updateSubjective(recordId: Long, evaluation: SubjectiveEvaluation)
     suspend fun completeRecord(recordId: Long): RecordValidationResult

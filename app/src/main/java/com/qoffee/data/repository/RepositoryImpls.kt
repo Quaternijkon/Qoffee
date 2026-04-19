@@ -10,10 +10,12 @@ import com.qoffee.core.model.AnalyticsDashboard
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
 import com.qoffee.core.model.BeanProfile
+import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.FlavorTag
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.ObjectiveDraftUpdate
+import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RecordValidationResult
 import com.qoffee.core.model.SubjectiveEvaluation
@@ -29,6 +31,8 @@ import com.qoffee.data.local.FlavorTagEntity
 import com.qoffee.data.local.GrinderProfileDao
 import com.qoffee.data.local.GrinderProfileEntity
 import com.qoffee.data.local.QoffeeDatabase
+import com.qoffee.data.local.RecipeTemplateDao
+import com.qoffee.data.local.RecipeTemplateEntity
 import com.qoffee.data.local.RecordFlavorTagCrossRef
 import com.qoffee.data.local.RecordFlavorTagDao
 import com.qoffee.data.local.SubjectiveEvaluationDao
@@ -37,6 +41,7 @@ import com.qoffee.data.mapper.toEntity
 import com.qoffee.domain.repository.AnalyticsRepository
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.PreferenceRepository
+import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -155,12 +160,70 @@ class CatalogRepositoryImpl @Inject constructor(
 }
 
 @Singleton
+class RecipeRepositoryImpl @Inject constructor(
+    private val archiveDao: ArchiveDao,
+    private val beanProfileDao: BeanProfileDao,
+    private val grinderProfileDao: GrinderProfileDao,
+    private val recipeTemplateDao: RecipeTemplateDao,
+    private val dataStore: DataStore<Preferences>,
+    private val timeProvider: TimeProvider,
+) : RecipeRepository {
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeRecipes(): Flow<List<RecipeTemplate>> = currentArchiveIdFlow().flatMapLatest { archiveId ->
+        archiveId?.let {
+            recipeTemplateDao.observeByArchive(it).map { entities -> entities.map { entity -> entity.toDomain() } }
+        } ?: flowOf(emptyList())
+    }
+
+    override suspend fun getRecipe(id: Long): RecipeTemplate? = recipeTemplateDao.getById(id)?.toDomain()
+
+    override suspend fun saveRecipe(template: RecipeTemplate): Long {
+        val archiveId = requireCurrentArchiveId()
+        ensureArchiveWritable(archiveId)
+        val bean = template.beanProfileId?.let { beanProfileDao.getById(it) }
+        val grinder = template.grinderProfileId?.let { grinderProfileDao.getById(it) }
+        val now = timeProvider.nowMillis()
+        val entity = template.copy(
+            archiveId = template.archiveId.takeIf { it > 0 } ?: archiveId,
+            beanNameSnapshot = bean?.name ?: template.beanNameSnapshot,
+            grinderNameSnapshot = grinder?.name ?: template.grinderNameSnapshot,
+            createdAt = template.createdAt.takeIf { it > 0 } ?: now,
+            updatedAt = now,
+        ).toEntity()
+        return if (template.id == 0L) {
+            recipeTemplateDao.insert(entity)
+        } else {
+            recipeTemplateDao.update(entity)
+            template.id
+        }
+    }
+
+    override suspend fun deleteRecipe(id: Long) {
+        val archiveId = requireCurrentArchiveId()
+        ensureArchiveWritable(archiveId)
+        recipeTemplateDao.deleteById(id)
+    }
+
+    private fun currentArchiveIdFlow(): Flow<Long?> =
+        dataStore.data.map { prefs -> prefs[PreferenceKeys.CURRENT_ARCHIVE_ID] }
+
+    private suspend fun requireCurrentArchiveId(): Long =
+        checkNotNull(dataStore.data.first()[PreferenceKeys.CURRENT_ARCHIVE_ID]) { "当前没有活动存档。" }
+
+    private suspend fun ensureArchiveWritable(archiveId: Long) {
+        check(!(archiveDao.getById(archiveId)?.isReadOnly ?: false)) { "当前存档为只读，不能修改内容。" }
+    }
+}
+
+@Singleton
 class RecordRepositoryImpl @Inject constructor(
     private val database: QoffeeDatabase,
     private val archiveDao: ArchiveDao,
     private val brewRecordDao: BrewRecordDao,
     private val beanProfileDao: BeanProfileDao,
     private val grinderProfileDao: GrinderProfileDao,
+    private val recipeTemplateDao: RecipeTemplateDao,
     private val subjectiveEvaluationDao: SubjectiveEvaluationDao,
     private val flavorTagDao: FlavorTagDao,
     private val recordFlavorTagDao: RecordFlavorTagDao,
@@ -186,12 +249,54 @@ class RecordRepositoryImpl @Inject constructor(
     override fun observeRecord(recordId: Long): Flow<CoffeeRecord?> =
         brewRecordDao.observeById(recordId).map { it?.toDomain() }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeRecentRecords(limit: Int): Flow<List<CoffeeRecord>> {
+        return currentArchiveIdFlow().flatMapLatest { archiveId ->
+            archiveId?.let {
+                brewRecordDao.observeRecentCompleted(it, limit).map { rows ->
+                    rows.map { row -> row.toDomain() }
+                }
+            } ?: flowOf(emptyList())
+        }
+    }
+
     override suspend fun getRecord(recordId: Long): CoffeeRecord? =
         brewRecordDao.getById(recordId)?.toDomain()
 
     override suspend fun getActiveDraftId(): Long? {
         val archiveId = requireCurrentArchiveId()
         return brewRecordDao.getActiveDraft(archiveId)?.id
+    }
+
+    override suspend fun createEmptyDraft(replaceActiveDraft: Boolean): Long = database.withTransaction {
+        val archiveId = requireCurrentArchiveId()
+        ensureArchiveWritable(archiveId)
+        val activeDraft = brewRecordDao.getActiveDraft(archiveId)
+        if (activeDraft != null && !replaceActiveDraft) {
+            return@withTransaction activeDraft.id
+        }
+        if (activeDraft != null) {
+            brewRecordDao.deleteDrafts(archiveId)
+        }
+        insertEmptyDraft(archiveId)
+    }
+
+    override suspend fun createDraftFromRecipe(recipeId: Long, replaceActiveDraft: Boolean): Long = database.withTransaction {
+        val archiveId = requireCurrentArchiveId()
+        ensureArchiveWritable(archiveId)
+        val recipe = checkNotNull(recipeTemplateDao.getById(recipeId)) { "配方不存在。" }
+        val activeDraft = brewRecordDao.getActiveDraft(archiveId)
+        val draftId = if (activeDraft != null && !replaceActiveDraft) {
+            activeDraft.id
+        } else {
+            if (activeDraft != null) {
+                brewRecordDao.deleteDrafts(archiveId)
+            }
+            insertEmptyDraft(archiveId)
+        }
+        val current = checkNotNull(brewRecordDao.getEntityById(draftId)) { "记录不存在。" }
+        brewRecordDao.update(applyRecipeToEntity(current, recipe))
+        draftId
     }
 
     override suspend fun getOrCreateActiveDraftId(autoRestore: Boolean): Long = database.withTransaction {
@@ -204,31 +309,37 @@ class RecordRepositoryImpl @Inject constructor(
         if (activeDraft != null && !autoRestore) {
             brewRecordDao.deleteDrafts(archiveId)
         }
-        val now = timeProvider.nowMillis()
-        brewRecordDao.insert(
-            BrewRecordEntity(
-                archiveId = archiveId,
-                status = RecordStatus.DRAFT.code,
-                brewMethodCode = null,
-                beanId = null,
-                beanNameSnapshot = null,
-                beanRoastLevelSnapshotValue = null,
-                beanProcessMethodSnapshotValue = null,
-                grinderId = null,
-                grinderNameSnapshot = null,
-                grindSetting = null,
-                coffeeDoseG = null,
-                brewWaterMl = null,
-                bypassWaterMl = null,
-                waterTempC = null,
-                notes = "",
-                brewedAt = now,
-                createdAt = now,
-                updatedAt = now,
-                totalWaterMl = null,
-                brewRatio = null,
-            ),
-        )
+        insertEmptyDraft(archiveId)
+    }
+
+    override suspend fun applyRecipeToDraft(recordId: Long, recipeId: Long) {
+        database.withTransaction {
+            val archiveId = requireCurrentArchiveId()
+            ensureArchiveWritable(archiveId)
+            val recipe = checkNotNull(recipeTemplateDao.getById(recipeId)) { "配方不存在。" }
+            val current = checkNotNull(brewRecordDao.getEntityById(recordId)) { "记录不存在。" }
+            brewRecordDao.update(applyRecipeToEntity(current, recipe))
+        }
+    }
+
+    override suspend fun getLatestComparableRecord(
+        beanId: Long?,
+        brewMethod: BrewMethod?,
+        excludingRecordId: Long?,
+    ): CoffeeRecord? {
+        if (beanId == null && brewMethod == null) return null
+        val archiveId = requireCurrentArchiveId()
+        return brewRecordDao.getLatestComparable(
+            archiveId = archiveId,
+            beanId = beanId,
+            brewMethodCode = brewMethod?.code,
+            excludingRecordId = excludingRecordId,
+        )?.toDomain()
+    }
+
+    override suspend fun duplicateLatestComparableAsDraft(beanId: Long?, brewMethod: BrewMethod?): Long? {
+        val comparable = getLatestComparableRecord(beanId = beanId, brewMethod = brewMethod)
+        return comparable?.let { duplicateRecordAsDraft(it.id) }
     }
 
     override suspend fun updateObjective(recordId: Long, update: ObjectiveDraftUpdate) {
@@ -249,6 +360,8 @@ class RecordRepositoryImpl @Inject constructor(
             }
             brewRecordDao.update(
                 current.copy(
+                    recipeTemplateId = update.recipeTemplateId,
+                    recipeNameSnapshot = update.recipeNameSnapshot,
                     brewMethodCode = update.brewMethod?.code,
                     beanId = bean?.id,
                     beanNameSnapshot = bean?.name,
@@ -343,6 +456,74 @@ class RecordRepositoryImpl @Inject constructor(
             )
         }
         newId
+    }
+
+    private suspend fun insertEmptyDraft(archiveId: Long): Long {
+        val now = timeProvider.nowMillis()
+        return brewRecordDao.insert(
+            BrewRecordEntity(
+                archiveId = archiveId,
+                status = RecordStatus.DRAFT.code,
+                brewMethodCode = null,
+                beanId = null,
+                beanNameSnapshot = null,
+                beanRoastLevelSnapshotValue = null,
+                beanProcessMethodSnapshotValue = null,
+                recipeTemplateId = null,
+                recipeNameSnapshot = null,
+                grinderId = null,
+                grinderNameSnapshot = null,
+                grindSetting = null,
+                coffeeDoseG = null,
+                brewWaterMl = null,
+                bypassWaterMl = null,
+                waterTempC = null,
+                notes = "",
+                brewedAt = now,
+                createdAt = now,
+                updatedAt = now,
+                totalWaterMl = null,
+                brewRatio = null,
+            ),
+        )
+    }
+
+    private suspend fun applyRecipeToEntity(
+        current: BrewRecordEntity,
+        recipe: RecipeTemplateEntity,
+    ): BrewRecordEntity {
+        val bean = recipe.beanId?.let { beanProfileDao.getById(it) }
+        val grinder = recipe.grinderId?.let { grinderProfileDao.getById(it) }
+        val totalWater = when {
+            recipe.brewWaterMl == null -> null
+            recipe.bypassWaterMl == null -> recipe.brewWaterMl
+            else -> recipe.brewWaterMl + recipe.bypassWaterMl
+        }
+        val brewRatio = if (totalWater != null && recipe.coffeeDoseG != null && recipe.coffeeDoseG > 0.0) {
+            totalWater / recipe.coffeeDoseG
+        } else {
+            null
+        }
+        return current.copy(
+            recipeTemplateId = recipe.id,
+            recipeNameSnapshot = recipe.name,
+            brewMethodCode = recipe.brewMethodCode,
+            beanId = bean?.id ?: recipe.beanId,
+            beanNameSnapshot = bean?.name ?: recipe.beanNameSnapshot,
+            beanRoastLevelSnapshotValue = bean?.roastLevelValue,
+            beanProcessMethodSnapshotValue = bean?.processValue,
+            grinderId = grinder?.id ?: recipe.grinderId,
+            grinderNameSnapshot = grinder?.name ?: recipe.grinderNameSnapshot,
+            grindSetting = recipe.grindSetting,
+            coffeeDoseG = recipe.coffeeDoseG,
+            brewWaterMl = recipe.brewWaterMl,
+            bypassWaterMl = recipe.bypassWaterMl,
+            waterTempC = recipe.waterTempC,
+            notes = recipe.notes,
+            updatedAt = timeProvider.nowMillis(),
+            totalWaterMl = totalWater,
+            brewRatio = brewRatio,
+        )
     }
 
     private fun currentArchiveIdFlow(): Flow<Long?> =

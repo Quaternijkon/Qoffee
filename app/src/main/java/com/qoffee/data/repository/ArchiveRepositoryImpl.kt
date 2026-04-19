@@ -24,6 +24,8 @@ import com.qoffee.data.local.FlavorTagEntity
 import com.qoffee.data.local.GrinderProfileDao
 import com.qoffee.data.local.GrinderProfileEntity
 import com.qoffee.data.local.QoffeeDatabase
+import com.qoffee.data.local.RecipeTemplateDao
+import com.qoffee.data.local.RecipeTemplateEntity
 import com.qoffee.data.local.RecordFlavorTagCrossRef
 import com.qoffee.data.local.RecordFlavorTagDao
 import com.qoffee.data.local.SubjectiveEvaluationDao
@@ -45,6 +47,7 @@ class ArchiveRepositoryImpl @Inject constructor(
     private val archiveDao: ArchiveDao,
     private val beanProfileDao: BeanProfileDao,
     private val grinderProfileDao: GrinderProfileDao,
+    private val recipeTemplateDao: RecipeTemplateDao,
     private val brewRecordDao: BrewRecordDao,
     private val subjectiveEvaluationDao: SubjectiveEvaluationDao,
     private val flavorTagDao: FlavorTagDao,
@@ -127,6 +130,19 @@ class ArchiveRepositoryImpl @Inject constructor(
             grinderIdMap[grinder.id] = newGrinderId
         }
 
+        val recipeIdMap = mutableMapOf<Long, Long>()
+        recipeTemplateDao.getAllByArchive(sourceArchiveId).forEach { recipe ->
+            val newRecipeId = recipeTemplateDao.insert(
+                recipe.copy(
+                    id = 0L,
+                    archiveId = newArchiveId,
+                    beanId = recipe.beanId?.let(beanIdMap::get),
+                    grinderId = recipe.grinderId?.let(grinderIdMap::get),
+                ),
+            )
+            recipeIdMap[recipe.id] = newRecipeId
+        }
+
         brewRecordDao.getAllByArchive(sourceArchiveId).forEach { row ->
             val sourceRecord = row.record
             val newRecordId = brewRecordDao.insert(
@@ -134,6 +150,7 @@ class ArchiveRepositoryImpl @Inject constructor(
                     id = 0L,
                     archiveId = newArchiveId,
                     beanId = sourceRecord.beanId?.let(beanIdMap::get),
+                    recipeTemplateId = sourceRecord.recipeTemplateId?.let(recipeIdMap::get),
                     grinderId = sourceRecord.grinderId?.let(grinderIdMap::get),
                     status = if (sourceRecord.status == RecordStatus.DRAFT.code) RecordStatus.COMPLETED.code else sourceRecord.status,
                     updatedAt = now,
@@ -234,6 +251,12 @@ class ArchiveRepositoryImpl @Inject constructor(
         val tagIds = seedPresetFlavorTagsForArchive(demoArchiveId)
         val beanIds = seedDemoBeans(demoArchiveId, now)
         val grinderIds = seedDemoGrinders(demoArchiveId, now)
+        seedDemoRecipes(
+            archiveId = demoArchiveId,
+            beanIds = beanIds,
+            grinderIds = grinderIds,
+            now = now,
+        )
         seedDemoRecords(
             archiveId = demoArchiveId,
             beanIds = beanIds,
@@ -282,6 +305,68 @@ class ArchiveRepositoryImpl @Inject constructor(
         return grinders.associate { grinder ->
             grinder.name to grinderProfileDao.insert(grinder)
         }
+    }
+
+    private suspend fun seedDemoRecipes(
+        archiveId: Long,
+        beanIds: Map<String, Long>,
+        grinderIds: Map<String, Long>,
+        now: Long,
+    ) {
+        val recipes = listOf(
+            RecipeTemplateEntity(
+                archiveId = archiveId,
+                name = "花魁手冲基准",
+                brewMethodCode = BrewMethod.POUR_OVER.code,
+                beanId = beanIds["埃塞俄比亚 花魁"],
+                beanNameSnapshot = "埃塞俄比亚 花魁",
+                grinderId = grinderIds["Comandante C40"],
+                grinderNameSnapshot = "Comandante C40",
+                grindSetting = 21.0,
+                coffeeDoseG = 15.0,
+                brewWaterMl = 240.0,
+                bypassWaterMl = 0.0,
+                waterTempC = 91.0,
+                notes = "适合作为花果香浅烘豆的起始参数。",
+                createdAt = now,
+                updatedAt = now,
+            ),
+            RecipeTemplateEntity(
+                archiveId = archiveId,
+                name = "巴西意式基准",
+                brewMethodCode = BrewMethod.ESPRESSO_MACHINE.code,
+                beanId = beanIds["巴西 皇后庄园"],
+                beanNameSnapshot = "巴西 皇后庄园",
+                grinderId = grinderIds["Niche Zero"],
+                grinderNameSnapshot = "Niche Zero",
+                grindSetting = 11.0,
+                coffeeDoseG = 18.0,
+                brewWaterMl = 38.0,
+                bypassWaterMl = 0.0,
+                waterTempC = 92.0,
+                notes = "作为坚果可可取向意式的常用起始点。",
+                createdAt = now,
+                updatedAt = now,
+            ),
+            RecipeTemplateEntity(
+                archiveId = archiveId,
+                name = "肯尼亚爱乐压",
+                brewMethodCode = BrewMethod.AEROPRESS.code,
+                beanId = beanIds["肯尼亚 AA"],
+                beanNameSnapshot = "肯尼亚 AA",
+                grinderId = grinderIds["EK43S"],
+                grinderNameSnapshot = "EK43S",
+                grindSetting = 7.5,
+                coffeeDoseG = 15.0,
+                brewWaterMl = 220.0,
+                bypassWaterMl = 40.0,
+                waterTempC = 86.0,
+                notes = "更强调酸甜与茶感的轻萃方案。",
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+        recipes.forEach { recipeTemplateDao.insert(it) }
     }
 
     private suspend fun seedDemoRecords(

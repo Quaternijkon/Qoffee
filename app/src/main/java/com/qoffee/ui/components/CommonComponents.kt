@@ -1,10 +1,17 @@
 package com.qoffee.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -13,14 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -28,6 +27,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -46,6 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qoffee.core.model.BeanProcessMethod
 import com.qoffee.core.model.RoastLevel
+import com.qoffee.ui.theme.QoffeeDashboardTheme
+import com.qoffee.ui.theme.qoffeePanelBrush
 
 data class DropdownOption<T>(
     val label: String,
@@ -58,27 +60,31 @@ fun HeroCard(
     subtitle: String,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.extraLarge,
+        border = BorderStroke(1.dp, dashboardColors.panelStrokeStrong),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Box(
+            modifier = Modifier
+                .background(brush = qoffeePanelBrush(strong = true))
+                .padding(horizontal = 24.dp, vertical = 22.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DashboardEmphasisText(
+                    text = title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = dashboardColors.titleText,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -87,27 +93,41 @@ fun HeroCard(
 fun SectionCard(
     title: String,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, dashboardColors.panelStroke),
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .padding(18.dp)
-                .animateContentSize(animationSpec = spring(stiffness = 450f)),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .background(brush = qoffeePanelBrush())
+                .padding(18.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+            Column(
+                modifier = Modifier.animateContentSize(animationSpec = spring(stiffness = 420f)),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                content = {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    content()
+                },
             )
-            content()
         }
     }
 }
@@ -127,7 +147,7 @@ fun <T> SingleChoiceChipGroup(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
         )
         FlowRow(
@@ -141,7 +161,10 @@ fun <T> SingleChoiceChipGroup(
                     onClick = { onSelected(option.value) },
                     label = { Text(option.label) },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        containerColor = QoffeeDashboardTheme.colors.panelMuted,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        selectedContainerColor = QoffeeDashboardTheme.colors.accentSoft,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
             }
@@ -161,11 +184,11 @@ fun RoastLevelSelector(
     ) {
         Text(
             text = "烘焙度",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
         )
         Text(
             text = "当前：${selected.displayName}",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -194,7 +217,7 @@ fun RoastLevelSelector(
                         )
                         Text(
                             text = level.shortLabel,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             color = if (level == selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -211,7 +234,7 @@ private fun CoffeeBeanGlyph(
     modifier: Modifier = Modifier,
 ) {
     val seamColor = if (filled) MaterialTheme.colorScheme.surface else tint
-    androidx.compose.foundation.Canvas(
+    Canvas(
         modifier = modifier.size(22.dp),
     ) {
         val width = size.width * 0.72f
@@ -246,10 +269,13 @@ fun BeanIdentityCard(
     roaster: String,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        color = dashboardColors.panelStrong,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, dashboardColors.panelStrokeStrong),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -293,9 +319,12 @@ fun <T> DropdownField(
             label = { Text(label) },
             placeholder = { Text(placeholder) },
             modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
             colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.background,
-                focusedContainerColor = MaterialTheme.colorScheme.background,
+                unfocusedContainerColor = QoffeeDashboardTheme.colors.panelMuted,
+                focusedContainerColor = QoffeeDashboardTheme.colors.panelMuted,
+                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                unfocusedIndicatorColor = QoffeeDashboardTheme.colors.panelStroke,
             ),
         )
         DropdownMenu(
@@ -342,10 +371,10 @@ fun RatingSelector(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = label, style = MaterialTheme.typography.titleMedium)
+            Text(text = label, style = MaterialTheme.typography.titleSmall)
             Text(
                 text = value?.toString() ?: "未评分",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
@@ -357,12 +386,20 @@ fun RatingSelector(
                 selected = value == null,
                 onClick = { onSelected(null) },
                 label = { Text("清空") },
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = QoffeeDashboardTheme.colors.panelMuted,
+                    selectedContainerColor = QoffeeDashboardTheme.colors.accentSoft,
+                ),
             )
             range.forEach { score ->
                 FilterChip(
                     selected = value == score,
                     onClick = { onSelected(score) },
                     label = { Text(score.toString()) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = QoffeeDashboardTheme.colors.panelMuted,
+                        selectedContainerColor = QoffeeDashboardTheme.colors.accentSoft,
+                    ),
                 )
             }
         }
@@ -388,7 +425,8 @@ fun TagSelector(
                 onClick = { onToggle(tag) },
                 label = { Text(tag) },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    containerColor = QoffeeDashboardTheme.colors.panelMuted,
+                    selectedContainerColor = QoffeeDashboardTheme.colors.accentSoft,
                 ),
             )
         }
@@ -401,12 +439,13 @@ fun EmptyStateCard(
     subtitle: String,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        color = dashboardColors.panelMuted,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, dashboardColors.panelStroke),
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -428,27 +467,34 @@ fun StatChip(
     modifier: Modifier = Modifier,
     leadingIcon: ImageVector? = null,
 ) {
-    AssistChip(
-        onClick = {},
-        enabled = false,
-        label = { Text(text) },
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Surface(
         modifier = modifier,
-        leadingIcon = if (leadingIcon != null) {
-            {
+        color = dashboardColors.panelMuted,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, dashboardColors.panelStroke),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (leadingIcon != null) {
                 Icon(
                     imageVector = leadingIcon,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
-        } else {
-            null
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            disabledContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-            disabledLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-    )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable
@@ -457,18 +503,27 @@ fun LabeledValue(
     value: String,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.widthIn(min = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    val dashboardColors = QoffeeDashboardTheme.colors
+    Surface(
+        modifier = modifier.widthIn(min = 108.dp),
+        color = dashboardColors.panelMuted,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, dashboardColors.panelStroke),
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value.ifBlank { "未填写" },
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = value.ifBlank { "未填写" },
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
     }
 }

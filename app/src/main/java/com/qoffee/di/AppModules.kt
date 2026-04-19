@@ -14,17 +14,21 @@ import com.qoffee.data.local.BrewRecordDao
 import com.qoffee.data.local.FlavorTagDao
 import com.qoffee.data.local.GrinderProfileDao
 import com.qoffee.data.local.QoffeeDatabase
+import com.qoffee.data.local.QoffeeDatabaseMigrations
+import com.qoffee.data.local.RecipeTemplateDao
 import com.qoffee.data.local.RecordFlavorTagDao
 import com.qoffee.data.local.SubjectiveEvaluationDao
 import com.qoffee.data.repository.ArchiveRepositoryImpl
 import com.qoffee.data.repository.AnalyticsRepositoryImpl
 import com.qoffee.data.repository.CatalogRepositoryImpl
 import com.qoffee.data.repository.PreferenceRepositoryImpl
+import com.qoffee.data.repository.RecipeRepositoryImpl
 import com.qoffee.data.repository.RecordRepositoryImpl
 import com.qoffee.domain.repository.ArchiveRepository
 import com.qoffee.domain.repository.AnalyticsRepository
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.PreferenceRepository
+import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
 import dagger.Binds
 import dagger.Module
@@ -45,7 +49,9 @@ object DatabaseModule {
             context,
             QoffeeDatabase::class.java,
             "qoffee.db",
-        ).fallbackToDestructiveMigration(false).build()
+        ).addMigrations(QoffeeDatabaseMigrations.MIGRATION_2_3)
+            .fallbackToDestructiveMigration(false)
+            .build()
     }
 
     @Provides
@@ -56,6 +62,9 @@ object DatabaseModule {
 
     @Provides
     fun provideGrinderProfileDao(database: QoffeeDatabase): GrinderProfileDao = database.grinderProfileDao()
+
+    @Provides
+    fun provideRecipeTemplateDao(database: QoffeeDatabase): RecipeTemplateDao = database.recipeTemplateDao()
 
     @Provides
     fun provideBrewRecordDao(database: QoffeeDatabase): BrewRecordDao = database.brewRecordDao()
@@ -98,6 +107,10 @@ abstract class BindingsModule {
     @Binds
     @Singleton
     abstract fun bindCatalogRepository(impl: CatalogRepositoryImpl): CatalogRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRecipeRepository(impl: RecipeRepositoryImpl): RecipeRepository
 
     @Binds
     @Singleton
