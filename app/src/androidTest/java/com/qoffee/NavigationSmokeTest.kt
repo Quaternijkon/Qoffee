@@ -26,14 +26,14 @@ class NavigationSmokeTest {
 
     @Test
     fun topLevelNavigationShowsExpectedScreens() {
-        composeRule.onNodeWithTag(QoffeeTestTags.RECORDS_SCREEN).fetchSemanticsNode()
+        composeRule.onNodeWithTag(QoffeeTestTags.BREW_SCREEN).fetchSemanticsNode()
 
-        composeRule.onNodeWithTag(QoffeeTestTags.NAV_ANALYSIS).performClick()
+        composeRule.onNodeWithTag(QoffeeTestTags.NAV_HISTORY).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(QoffeeTestTags.ANALYSIS_SCREEN).fetchSemanticsNode()
+        composeRule.onNodeWithTag(QoffeeTestTags.HISTORY_SCREEN).fetchSemanticsNode()
 
-        composeRule.onNodeWithTag(QoffeeTestTags.NAV_PROFILE).performClick()
+        composeRule.onNodeWithTag(QoffeeTestTags.NAV_MY).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(QoffeeTestTags.PROFILE_SCREEN).fetchSemanticsNode()
+        composeRule.onNodeWithTag(QoffeeTestTags.MY_SCREEN).fetchSemanticsNode()
     }
 }

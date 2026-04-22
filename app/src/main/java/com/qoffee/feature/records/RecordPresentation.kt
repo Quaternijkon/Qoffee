@@ -77,6 +77,7 @@ internal fun buildComparisonSummary(
         previous.subjectiveEvaluation?.overall?.let { currentScore - it }
     }
     val details = listOfNotNull(
+        formatNumericChange("Brew Time", current.brewDurationSeconds?.toDouble(), previous.brewDurationSeconds?.toDouble(), "s", decimals = 0),
         scoreDelta?.takeIf { it != 0 }?.let { formatDeltaText("总分", it, "") },
         formatNumericChange("水温", current.waterTempC, previous.waterTempC, "°C", decimals = 0),
         formatNumericChange("水量", current.brewWaterMl, previous.brewWaterMl, "ml", decimals = 0),

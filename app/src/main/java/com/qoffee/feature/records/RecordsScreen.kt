@@ -18,6 +18,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.FolderCopy
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,24 +38,30 @@ import androidx.lifecycle.viewModelScope
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
 import com.qoffee.core.model.ArchiveSummary
+import com.qoffee.core.model.BeanInventory
 import com.qoffee.core.model.BeanProfile
+import com.qoffee.core.model.BrewSession
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.GrinderProfile
+import com.qoffee.core.model.PracticeBlock
+import com.qoffee.core.model.RecordDraftLaunchBehavior
+import com.qoffee.core.model.RecordPrefillSource
 import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordStatus
+import com.qoffee.core.model.resolveRecordDraftLaunchBehavior
 import com.qoffee.domain.repository.CatalogRepository
+import com.qoffee.domain.repository.ExperimentRepository
 import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.domain.repository.SessionRepository
 import com.qoffee.ui.QoffeeTestTags
-import com.qoffee.ui.components.CompactDropdownChip
-import com.qoffee.ui.components.CompactFilterBar
 import com.qoffee.ui.components.DashboardPage
-import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.EmptyStateCard
+import com.qoffee.ui.components.BeanInventoryCard
+import com.qoffee.ui.components.FeatureEntryCard
 import com.qoffee.ui.components.MetricCard
 import com.qoffee.ui.components.PageHeader
-import com.qoffee.ui.components.QuickActionCard
 import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.StatChip
 import com.qoffee.ui.navigation.RecordEditorEntry
@@ -69,6 +80,9 @@ import kotlinx.coroutines.flow.stateIn
 
 data class RecordsHubUiState(
     val filter: AnalysisFilter = AnalysisFilter(timeRange = AnalysisTimeRange.ALL),
+    val activeSession: BrewSession? = null,
+    val practiceBlocks: List<PracticeBlock> = emptyList(),
+    val inventory: List<BeanInventory> = emptyList(),
     val activeDraft: CoffeeRecord? = null,
     val recentRecords: List<CoffeeRecord> = emptyList(),
     val timelineGroups: List<RecordTimelineGroup> = emptyList(),
@@ -103,6 +117,8 @@ class RecordsViewModel @Inject constructor(
     recordRepository: RecordRepository,
     catalogRepository: CatalogRepository,
     recipeRepository: RecipeRepository,
+    sessionRepository: SessionRepository,
+    experimentRepository: ExperimentRepository,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(AnalysisFilter(timeRange = AnalysisTimeRange.ALL))
@@ -143,9 +159,25 @@ class RecordsViewModel @Inject constructor(
 
     val uiState: StateFlow<RecordsHubUiState> = baseFlow
         .combine(recipeRepository.observeRecipes()) { stageThree, recipes ->
+            stageThree to recipes
+        }
+        .combine(sessionRepository.observeActiveSession()) { stageAndRecipes, activeSession ->
+            Triple(stageAndRecipes.first, stageAndRecipes.second, activeSession)
+        }
+        .combine(experimentRepository.observePracticeBlocks()) { stageRecipesAndSession, practiceBlocks ->
+            stageRecipesAndSession to practiceBlocks
+        }
+        .combine(experimentRepository.observeBeanInventory()) { stageAndPracticeBlocks, inventory ->
+            val stageThree = stageAndPracticeBlocks.first.first
+            val recipes = stageAndPracticeBlocks.first.second
+            val activeSession = stageAndPracticeBlocks.first.third
+            val practiceBlocks = stageAndPracticeBlocks.second
             val completedRecords = stageThree.records.filter { it.status == RecordStatus.COMPLETED }
             RecordsHubUiState(
                 filter = stageThree.filter,
+                activeSession = activeSession,
+                practiceBlocks = practiceBlocks,
+                inventory = inventory,
                 activeDraft = stageThree.records.firstOrNull { it.status == RecordStatus.DRAFT },
                 recentRecords = stageThree.recentRecords,
                 timelineGroups = buildRecordTimelineGroups(completedRecords),
@@ -183,7 +215,9 @@ fun RecordsRoute(
     currentArchive: ArchiveSummary?,
     isReadOnlyArchive: Boolean,
     onOpenDetail: (Long) -> Unit,
-    onOpenEditor: (Long?, Long?, RecordEditorEntry, Long?) -> Unit,
+    onOpenSession: (BrewMethod) -> Unit,
+    onOpenEditor: (Long?, Long?, RecordEditorEntry, Long?, Long?) -> Unit,
+    onOpenAnalysis: () -> Unit,
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -192,12 +226,10 @@ fun RecordsRoute(
         currentArchive = currentArchive,
         uiState = uiState,
         isReadOnlyArchive = isReadOnlyArchive,
-        onTimeRangeChange = viewModel::updateTimeRange,
-        onMethodChange = viewModel::updateMethod,
-        onBeanChange = viewModel::updateBean,
-        onGrinderChange = viewModel::updateGrinder,
         onOpenDetail = onOpenDetail,
+        onOpenSession = onOpenSession,
         onOpenEditor = onOpenEditor,
+        onOpenAnalysis = onOpenAnalysis,
     )
 }
 
@@ -208,216 +240,221 @@ private fun RecordsScreen(
     currentArchive: ArchiveSummary?,
     uiState: RecordsHubUiState,
     isReadOnlyArchive: Boolean,
-    onTimeRangeChange: (AnalysisTimeRange) -> Unit,
-    onMethodChange: (BrewMethod?) -> Unit,
-    onBeanChange: (Long?) -> Unit,
-    onGrinderChange: (Long?) -> Unit,
     onOpenDetail: (Long) -> Unit,
-    onOpenEditor: (Long?, Long?, RecordEditorEntry, Long?) -> Unit,
+    onOpenSession: (BrewMethod) -> Unit,
+    onOpenEditor: (Long?, Long?, RecordEditorEntry, Long?, Long?) -> Unit,
+    onOpenAnalysis: () -> Unit,
 ) {
     var pendingAction by remember { mutableStateOf<PendingDraftAction?>(null) }
-    val historyCount = uiState.timelineGroups.sumOf { it.items.size }
+
+    fun openDraftForSource(source: RecordPrefillSource) {
+        when (source) {
+            RecordPrefillSource.Blank -> onOpenEditor(null, null, RecordEditorEntry.NEW, null, null)
+            RecordPrefillSource.Draft -> uiState.activeDraft?.let {
+                onOpenEditor(it.id, null, RecordEditorEntry.DRAFT, null, null)
+            }
+            is RecordPrefillSource.Recipe -> onOpenEditor(null, null, RecordEditorEntry.RECIPE, source.recipeId, null)
+            is RecordPrefillSource.Record -> onOpenEditor(null, source.recordId, RecordEditorEntry.DUPLICATE, null, null)
+            is RecordPrefillSource.Bean -> onOpenEditor(null, null, RecordEditorEntry.BEAN, null, source.beanId)
+        }
+    }
+
+    fun handlePrefillRequest(source: RecordPrefillSource) {
+        when (resolveRecordDraftLaunchBehavior(uiState.activeDraft, source)) {
+            RecordDraftLaunchBehavior.CREATE_NEW -> openDraftForSource(source)
+            RecordDraftLaunchBehavior.CONTINUE_CURRENT -> openDraftForSource(RecordPrefillSource.Draft)
+            RecordDraftLaunchBehavior.CONFIRM_REPLACE -> {
+                pendingAction = when (source) {
+                    RecordPrefillSource.Blank -> PendingDraftAction.NewRecord
+                    is RecordPrefillSource.Recipe -> PendingDraftAction.Recipe(source.recipeId)
+                    is RecordPrefillSource.Bean -> PendingDraftAction.Bean(source.beanId)
+                    RecordPrefillSource.Draft -> PendingDraftAction.ResumeDraft
+                    is RecordPrefillSource.Record -> PendingDraftAction.Duplicate(source.recordId)
+                }
+            }
+        }
+    }
 
     DashboardPage(
         paddingValues = paddingValues,
-        testTag = QoffeeTestTags.RECORDS_SCREEN,
+        testTag = QoffeeTestTags.BREW_SCREEN,
     ) {
         PageHeader(
-            title = "记录工作台",
-            subtitle = currentArchive?.archive?.name ?: "正在准备存档",
-            eyebrow = "QOFFEE / OPERATIONS",
+            title = "冲煮",
+            subtitle = currentArchive?.archive?.name,
+            eyebrow = "QOFFEE / BREW",
         )
 
-        SectionCard(
-            title = "今日控制台",
-            subtitle = "把活跃草稿、当前筛选和历史样本集中到同一个视图里。",
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricCard(
-                    label = "活跃草稿",
-                    value = if (uiState.activeDraft != null) "1" else "0",
-                    supporting = uiState.activeDraft?.let { "上次更新 ${formatDateTime(it.updatedAt)}" } ?: "暂无待续写草稿",
-                    modifier = Modifier.weight(1f),
-                )
-                MetricCard(
-                    label = "历史样本",
-                    value = historyCount.toString(),
-                    supporting = if (historyCount == 0) "开始记录第一杯" else "支持按时间和设备筛选",
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricCard(
-                    label = "配方模板",
-                    value = uiState.recipes.size.toString(),
-                    supporting = "可一键套用客观参数",
-                    modifier = Modifier.weight(1f),
-                )
-                MetricCard(
-                    label = "当前筛选",
-                    value = uiState.filter.timeRange.displayName,
-                    supporting = uiState.filter.brewMethod?.displayName ?: "全部方式",
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            if (isReadOnlyArchive) {
-                Text(
-                    text = "当前处于只读示范存档，适合浏览结构和复盘方式；如需录入记录，请先复制一个自己的存档。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        SectionCard(
-            title = "快速开始",
-            subtitle = "把最常见的三种进入路径变成高权重操作。",
-        ) {
-            Column(
-                modifier = Modifier.testTag(QoffeeTestTags.RECORDS_PRIMARY_ACTIONS),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                QuickActionCard(
-                    title = "新建记录",
-                    subtitle = "从空白参数开始，立即记录今天这杯咖啡。",
-                    onClick = {
-                        if (uiState.activeDraft != null) {
-                            pendingAction = PendingDraftAction.NewRecord
-                        } else {
-                            onOpenEditor(null, null, RecordEditorEntry.NEW, null)
-                        }
-                    },
-                    enabled = !isReadOnlyArchive,
-                    badge = "PRIMARY",
-                    highlighted = true,
-                )
-                QuickActionCard(
-                    title = "继续草稿",
-                    subtitle = uiState.activeDraft?.let { "上次停在 ${formatDateTime(it.updatedAt)}，继续补完这条记录。" }
-                        ?: "当前没有未完成草稿。",
-                    onClick = { uiState.activeDraft?.let { onOpenEditor(it.id, null, RecordEditorEntry.DRAFT, null) } },
-                    enabled = !isReadOnlyArchive && uiState.activeDraft != null,
-                    badge = "DRAFT",
-                )
-                QuickActionCard(
-                    title = "复制上一杯",
-                    subtitle = uiState.recentRecords.firstOrNull()?.let {
-                        "${it.beanNameSnapshot ?: "未命名咖啡豆"} · ${it.brewMethod?.displayName ?: "未指定方式"}"
-                    } ?: "最近还没有可复制的完成记录。",
-                    onClick = {
-                        uiState.recentRecords.firstOrNull()?.let { onOpenEditor(null, it.id, RecordEditorEntry.DUPLICATE, null) }
-                    },
-                    enabled = !isReadOnlyArchive && uiState.recentRecords.isNotEmpty(),
-                    badge = "REUSE",
-                )
-            }
-        }
-
-        SectionCard(
-            title = "配方模板",
-            subtitle = "将常用客观参数沉淀成模板，减少重复填写。",
-        ) {
-            if (uiState.recipes.isEmpty()) {
-                EmptyStateCard(
-                    title = "还没有配方模板",
-                    subtitle = "去“我的”里保存常用客观参数后，就能在这里一键采用。",
-                )
-            } else {
+        if (uiState.inventory.isNotEmpty()) {
+            SectionCard(title = "库存豆子", subtitle = "直接点击一颗豆子，就开始一条以它为原料的记录。") {
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    uiState.recipes.forEach { recipe ->
-                        RecipeTemplateCard(
-                            recipe = recipe,
-                            enabled = !isReadOnlyArchive,
+                    uiState.inventory.forEach { inventory ->
+                        BeanInventoryCard(
+                            inventory = inventory,
                             onClick = {
-                                if (uiState.activeDraft != null) {
-                                    pendingAction = PendingDraftAction.Recipe(recipe.id)
-                                } else {
-                                    onOpenEditor(null, null, RecordEditorEntry.RECIPE, recipe.id)
+                                inventory.beanId?.let { beanId ->
+                                    handlePrefillRequest(RecordPrefillSource.Bean(beanId))
                                 }
                             },
+                            enabled = !isReadOnlyArchive && inventory.beanId != null,
                         )
                     }
                 }
             }
         }
 
-        if (uiState.recentRecords.isNotEmpty()) {
+        uiState.activeSession?.let { session ->
             SectionCard(
-                title = "最近记录",
-                subtitle = "最近几杯的状态、得分与详情入口。",
+                title = "继续会话",
             ) {
-                uiState.recentRecords.forEach { record ->
-                    HubRecentRecordRow(
-                        record = record,
-                        onOpenDetail = { onOpenDetail(record.id) },
+                FeatureEntryCard(
+                    title = "继续 ${session.method.displayName} 会话",
+                    hint = session.currentStage?.title ?: "继续当前练习",
+                    icon = Icons.Outlined.PlayArrow,
+                    onClick = { onOpenSession(session.method) },
+                    badge = "SESSION",
+                    selected = true,
+                )
+            }
+        }
+
+        SectionCard(
+            title = "主要入口",
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FeatureEntryCard(
+                    title = "添加记录",
+                    hint = "空白新建",
+                    icon = Icons.Outlined.Add,
+                    onClick = { handlePrefillRequest(RecordPrefillSource.Blank) },
+                    modifier = Modifier.weight(1f),
+                    badge = "NEW",
+                    selected = true,
+                    enabled = !isReadOnlyArchive,
+                )
+                FeatureEntryCard(
+                    title = "继续草稿",
+                    hint = if (uiState.activeDraft != null) "上次未完成" else "暂无草稿",
+                    icon = Icons.Outlined.Restore,
+                    onClick = { handlePrefillRequest(RecordPrefillSource.Draft) },
+                    modifier = Modifier.weight(1f),
+                    badge = "DRAFT",
+                    enabled = !isReadOnlyArchive && uiState.activeDraft != null,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FeatureEntryCard(
+                    title = "开始冲煮",
+                    hint = "主动会话",
+                    icon = Icons.Outlined.PlayArrow,
+                    onClick = { onOpenSession(BrewMethod.POUR_OVER) },
+                    modifier = Modifier.weight(1f),
+                    badge = "LIVE",
+                    selected = true,
+                )
+                FeatureEntryCard(
+                    title = "常用配方",
+                    hint = if (uiState.recipes.isEmpty()) "暂无配方" else "从复用参数直接开记",
+                    icon = Icons.Outlined.FolderCopy,
+                    onClick = {
+                        uiState.recipes.firstOrNull()?.let { recipe ->
+                            handlePrefillRequest(RecordPrefillSource.Recipe(recipe.id))
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    badge = "REUSE",
+                    enabled = !isReadOnlyArchive && uiState.recipes.isNotEmpty(),
+                )
+            }
+        }
+
+        if (uiState.practiceBlocks.isNotEmpty()) {
+            SectionCard(
+                title = "练习计划",
+            ) {
+                uiState.practiceBlocks.take(4).forEach { block ->
+                    FeatureEntryCard(
+                        title = block.title,
+                        hint = "${block.sessionTarget} 次 · ${block.level.displayName}",
+                        icon = Icons.Outlined.PlayArrow,
+                        onClick = { onOpenSession(block.method ?: BrewMethod.POUR_OVER) },
+                        badge = if (block.proOnly) "PRO" else "PLAN",
                     )
                 }
             }
         }
 
         SectionCard(
-            title = "历史筛选",
-            subtitle = "控制时间范围、方式、豆子与磨豆机，收敛当前分析视角。",
+            title = "常用配方",
+            subtitle = "配方来自真实记录，点击就能直接进入一条预填记录。",
         ) {
-            CompactFilterBar {
-                CompactDropdownChip(
-                    label = "时间",
-                    selectedLabel = uiState.filter.timeRange.displayName,
-                    options = AnalysisTimeRange.entries.map { DropdownOption(it.displayName, it) },
-                    onSelected = { selected -> selected?.let(onTimeRangeChange) },
-                    allowClear = false,
+            if (uiState.recipes.isEmpty()) {
+                EmptyStateCard(
+                    title = "还没有常用配方",
+                    subtitle = "在记录页或详情页把一条真实记录设为配方，这里就会自然出现。",
                 )
-                CompactDropdownChip(
-                    label = "方式",
-                    selectedLabel = uiState.filter.brewMethod?.displayName,
-                    options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
-                    onSelected = onMethodChange,
-                )
-                CompactDropdownChip(
-                    label = "豆子",
-                    selectedLabel = uiState.beans.firstOrNull { it.id == uiState.filter.beanId }?.name,
-                    options = uiState.beans.map { DropdownOption(it.name, it.id) },
-                    onSelected = onBeanChange,
-                )
-                CompactDropdownChip(
-                    label = "磨豆机",
-                    selectedLabel = uiState.grinders.firstOrNull { it.id == uiState.filter.grinderId }?.name,
-                    options = uiState.grinders.map { DropdownOption(it.name, it.id) },
-                    onSelected = onGrinderChange,
-                )
-            }
-        }
-
-        if (uiState.timelineGroups.isEmpty()) {
-            EmptyStateCard(
-                title = "还没有完成记录",
-                subtitle = if (isReadOnlyArchive) {
-                    "当前是只读示范存档，可以先浏览记录结构与分析逻辑。"
-                } else {
-                    "从上面的快速开始或配方模板进入，写下今天第一杯。"
-                },
-            )
-        } else {
-            uiState.timelineGroups.forEach { group ->
-                SectionCard(
-                    title = group.label,
-                    subtitle = "按冲煮日期归档，保留与上一杯的差异信息。",
+            } else {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    group.items.forEach { item ->
-                        TimelineRecordCard(
-                            item = item,
-                            isReadOnlyArchive = isReadOnlyArchive,
-                            onOpenDetail = { onOpenDetail(item.record.id) },
-                            onOpenEditor = { recordId, duplicateFrom, entry ->
-                                onOpenEditor(recordId, duplicateFrom, entry, null)
-                            },
+                    uiState.recipes.take(6).forEach { recipe ->
+                        RecipeTemplateCard(
+                            recipe = recipe,
+                            enabled = !isReadOnlyArchive,
+                            onClick = { handlePrefillRequest(RecordPrefillSource.Recipe(recipe.id)) },
                         )
                     }
                 }
             }
+        }
+
+        uiState.activeDraft?.let { draft ->
+            SectionCard(
+                title = "当前草稿",
+            ) {
+                Text(
+                    text = formatDateTime(draft.updatedAt),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatChip(text = draft.brewMethod?.displayName ?: "未指定方式")
+                    draft.beanNameSnapshot?.let { StatChip(text = it) }
+                }
+            }
+        }
+
+        SectionCard(
+            title = "最近记录与复盘",
+            subtitle = "最近做了什么、接下来怎么复盘，都回到记录这条主链路里。",
+        ) {
+            if (uiState.recentRecords.isEmpty()) {
+                EmptyStateCard(
+                    title = "还没有最近记录",
+                    subtitle = "完成几条带评分的记录后，这里会显示最近样本并直接进入统计复盘。",
+                )
+            } else {
+                uiState.recentRecords.take(3).forEach { record ->
+                    HubRecentRecordRow(
+                        record = record,
+                        onOpenDetail = { onOpenDetail(record.id) },
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = onOpenAnalysis,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("进入复盘统计")
+            }
+        }
+
+        if (isReadOnlyArchive) {
+            StatChip(text = "当前为只读示范存档")
         }
     }
 
@@ -430,23 +467,31 @@ private fun RecordsScreen(
                     when (action) {
                         PendingDraftAction.NewRecord -> "你可以继续当前草稿，或放弃它并开始一条新的记录。"
                         is PendingDraftAction.Recipe -> "你可以继续当前草稿，或放弃它并从所选配方开始。"
+                        is PendingDraftAction.Bean -> "你可以继续当前草稿，或放弃它并改为记录这颗豆子。"
+                        is PendingDraftAction.Duplicate -> "你可以继续当前草稿，或放弃它并复制这条历史记录。"
+                        PendingDraftAction.ResumeDraft -> "当前草稿已存在，直接继续填写会更符合当前状态。"
                     },
                 )
             },
             confirmButton = {
                 Button(onClick = {
                     when (action) {
-                        PendingDraftAction.NewRecord -> onOpenEditor(null, null, RecordEditorEntry.NEW, null)
-                        is PendingDraftAction.Recipe -> onOpenEditor(null, null, RecordEditorEntry.RECIPE, action.recipeId)
+                        PendingDraftAction.NewRecord -> onOpenEditor(null, null, RecordEditorEntry.NEW, null, null)
+                        is PendingDraftAction.Recipe -> onOpenEditor(null, null, RecordEditorEntry.RECIPE, action.recipeId, null)
+                        is PendingDraftAction.Bean -> onOpenEditor(null, null, RecordEditorEntry.BEAN, null, action.beanId)
+                        is PendingDraftAction.Duplicate -> onOpenEditor(null, action.recordId, RecordEditorEntry.DUPLICATE, null, null)
+                        PendingDraftAction.ResumeDraft -> uiState.activeDraft?.let {
+                            onOpenEditor(it.id, null, RecordEditorEntry.DRAFT, null, null)
+                        }
                     }
                     pendingAction = null
                 }) {
-                    Text("放弃草稿并继续")
+                    Text("替换草稿并继续")
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = {
-                    uiState.activeDraft?.let { onOpenEditor(it.id, null, RecordEditorEntry.DRAFT, null) }
+                    uiState.activeDraft?.let { onOpenEditor(it.id, null, RecordEditorEntry.DRAFT, null, null) }
                     pendingAction = null
                 }) {
                     Text("继续当前草稿")
@@ -542,7 +587,7 @@ private fun TimelineRecordCard(
     item: RecordTimelineItem,
     isReadOnlyArchive: Boolean,
     onOpenDetail: () -> Unit,
-    onOpenEditor: (Long?, Long?, RecordEditorEntry) -> Unit,
+    onOpenEditor: (Long?, Long?, RecordEditorEntry, Long?, Long?) -> Unit,
 ) {
     val record = item.record
     val formatter = remember { SimpleDateFormat("HH:mm", Locale.CHINA) }
@@ -571,7 +616,7 @@ private fun TimelineRecordCard(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 StatChip(text = formatter.format(Date(record.brewedAt)))
-                record.subjectiveEvaluation?.overall?.let { StatChip(text = "总分 $it / 10") }
+                record.subjectiveEvaluation?.overall?.let { StatChip(text = "总分 $it / 5") }
                 record.recipeNameSnapshot?.let { StatChip(text = it) }
             }
             Text(
@@ -596,7 +641,7 @@ private fun TimelineRecordCard(
                 }
                 if (!isReadOnlyArchive) {
                     Button(
-                        onClick = { onOpenEditor(null, record.id, RecordEditorEntry.DUPLICATE) },
+                        onClick = { onOpenEditor(null, record.id, RecordEditorEntry.DUPLICATE, null, null) },
                     ) {
                         Text("复制一杯")
                     }
@@ -621,4 +666,7 @@ private fun formatNumber(value: Double): String {
 private sealed interface PendingDraftAction {
     data object NewRecord : PendingDraftAction
     data class Recipe(val recipeId: Long) : PendingDraftAction
+    data class Bean(val beanId: Long) : PendingDraftAction
+    data class Duplicate(val recordId: Long) : PendingDraftAction
+    data object ResumeDraft : PendingDraftAction
 }

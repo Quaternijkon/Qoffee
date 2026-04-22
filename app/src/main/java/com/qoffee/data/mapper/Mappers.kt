@@ -13,6 +13,7 @@ import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RoastLevel
 import com.qoffee.core.model.SubjectiveEvaluation
+import com.qoffee.core.model.WaterCurveJsonCodec
 import com.qoffee.data.local.ArchiveEntity
 import com.qoffee.data.local.ArchiveSummaryRow
 import com.qoffee.data.local.BeanProfileEntity
@@ -51,6 +52,7 @@ fun BeanProfileEntity.toDomain() = BeanProfile(
     variety = variety,
     roastLevel = RoastLevel.fromStorageValue(roastLevelValue),
     roastDateEpochDay = roastDateEpochDay,
+    initialStockG = initialStockG,
     notes = notes,
     createdAt = createdAt,
 )
@@ -65,6 +67,7 @@ fun BeanProfile.toEntity() = BeanProfileEntity(
     variety = variety,
     roastLevelValue = roastLevel.storageValue,
     roastDateEpochDay = roastDateEpochDay,
+    initialStockG = initialStockG,
     notes = notes,
     createdAt = createdAt,
 )
@@ -107,6 +110,7 @@ fun RecipeTemplateEntity.toDomain() = RecipeTemplate(
     brewWaterMl = brewWaterMl,
     bypassWaterMl = bypassWaterMl,
     waterTempC = waterTempC,
+    waterCurve = WaterCurveJsonCodec.decode(waterCurveJson),
     notes = notes,
     createdAt = createdAt,
     updatedAt = updatedAt,
@@ -126,6 +130,7 @@ fun RecipeTemplate.toEntity() = RecipeTemplateEntity(
     brewWaterMl = brewWaterMl,
     bypassWaterMl = bypassWaterMl,
     waterTempC = waterTempC,
+    waterCurveJson = WaterCurveJsonCodec.encode(waterCurve),
     notes = notes,
     createdAt = createdAt,
     updatedAt = updatedAt,
@@ -185,8 +190,10 @@ fun BrewRecordEntity.toDomain(
     brewWaterMl = brewWaterMl,
     bypassWaterMl = bypassWaterMl,
     waterTempC = waterTempC,
+    waterCurve = WaterCurveJsonCodec.decode(waterCurveJson),
     notes = notes,
     brewedAt = brewedAt,
+    brewDurationSeconds = brewDurationSeconds,
     createdAt = createdAt,
     updatedAt = updatedAt,
     totalWaterMl = totalWaterMl,

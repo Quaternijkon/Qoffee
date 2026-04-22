@@ -1,15 +1,17 @@
 package com.qoffee.ui
 
 object QoffeeTestTags {
-    const val RECORDS_SCREEN = "records_screen"
-    const val ANALYSIS_SCREEN = "analysis_screen"
-    const val PROFILE_SCREEN = "profile_screen"
-    const val RECORDS_PRIMARY_ACTIONS = "records_primary_actions"
+    const val BREW_SCREEN = "brew_screen"
+    const val LEARN_SCREEN = "learn_screen"
+    const val HISTORY_SCREEN = "history_screen"
+    const val MY_SCREEN = "my_screen"
     const val ANALYSIS_FILTERS = "analysis_filters"
+    const val ANALYSIS_EXPORT_BUTTON = "analysis_export_button"
+    const val ANALYSIS_RESET_BUTTON = "analysis_reset_button"
     const val PROFILE_ASSETS = "profile_assets"
     const val RECORD_EDITOR_SCREEN = "record_editor_screen"
-    const val RECORD_EDITOR_ACTION_BAR = "record_editor_action_bar"
-    const val NAV_RECORDS = "nav_records"
-    const val NAV_ANALYSIS = "nav_analysis"
-    const val NAV_PROFILE = "nav_profile"
+    const val NAV_BREW = "nav_brew"
+    const val NAV_LEARN = "nav_learn"
+    const val NAV_HISTORY = "nav_history"
+    const val NAV_MY = "nav_my"
 }

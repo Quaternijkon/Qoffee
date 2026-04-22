@@ -36,6 +36,7 @@ import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.RoastLevel
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.ui.components.BeanIdentityCard
+import com.qoffee.ui.components.DatePickerField
 import com.qoffee.ui.components.DropdownField
 import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.EmptyStateCard
@@ -44,8 +45,6 @@ import com.qoffee.ui.components.RoastLevelSelector
 import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.SingleChoiceChipGroup
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.time.LocalDate
-import java.time.format.DateTimeParseException
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -254,9 +253,7 @@ private fun BeanEditorDialog(
     var processMethod by remember(initialValue) { mutableStateOf(initialValue?.processMethod ?: BeanProcessMethod.WASHED) }
     var variety by remember(initialValue) { mutableStateOf(initialValue?.variety.orEmpty()) }
     var roastLevel by remember(initialValue) { mutableStateOf(initialValue?.roastLevel ?: RoastLevel.MEDIUM) }
-    var roastDate by remember(initialValue) {
-        mutableStateOf(initialValue?.roastDateEpochDay?.let(LocalDate::ofEpochDay)?.toString().orEmpty())
-    }
+    var roastDateEpochDay by remember(initialValue) { mutableStateOf(initialValue?.roastDateEpochDay) }
     var notes by remember(initialValue) { mutableStateOf(initialValue?.notes.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -280,10 +277,10 @@ private fun BeanEditorDialog(
                     selected = roastLevel,
                     onSelected = { roastLevel = it },
                 )
-                OutlinedTextField(
-                    value = roastDate,
-                    onValueChange = { roastDate = it },
-                    label = { Text("烘焙日期（YYYY-MM-DD）") },
+                DatePickerField(
+                    label = "烘焙日期",
+                    valueEpochDay = roastDateEpochDay,
+                    onValueChange = { roastDateEpochDay = it },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth())
@@ -293,12 +290,6 @@ private fun BeanEditorDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val parsedDate = try {
-                        roastDate.takeIf { it.isNotBlank() }?.let(LocalDate::parse)?.toEpochDay()
-                    } catch (_: DateTimeParseException) {
-                        error = "烘焙日期请使用 YYYY-MM-DD 格式。"
-                        return@Button
-                    }
                     if (name.isBlank()) {
                         error = "名称不能为空。"
                         return@Button
@@ -313,7 +304,7 @@ private fun BeanEditorDialog(
                                 processMethod = processMethod,
                                 variety = variety.trim(),
                                 roastLevel = roastLevel,
-                                roastDateEpochDay = parsedDate,
+                                roastDateEpochDay = roastDateEpochDay,
                                 notes = notes.trim(),
                                 createdAt = initialValue?.createdAt ?: 0L,
                             ),

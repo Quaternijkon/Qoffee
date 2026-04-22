@@ -13,6 +13,7 @@ import com.qoffee.core.model.BeanProcessMethod
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RoastLevel
+import com.qoffee.core.model.legacyTenPointScoreToFivePoint
 import com.qoffee.data.local.ArchiveDao
 import com.qoffee.data.local.ArchiveEntity
 import com.qoffee.data.local.BeanProfileDao
@@ -54,6 +55,7 @@ class ArchiveRepositoryImpl @Inject constructor(
     private val recordFlavorTagDao: RecordFlavorTagDao,
     private val dataStore: DataStore<Preferences>,
     private val timeProvider: TimeProvider,
+    private val frozenDataBridge: FrozenDataBridge,
 ) : ArchiveRepository {
 
     override fun observeArchives(): Flow<List<ArchiveSummary>> =
@@ -88,6 +90,7 @@ class ArchiveRepositoryImpl @Inject constructor(
         )
         seedPresetFlavorTagsForArchive(id)
         switchArchive(id)
+        frozenDataBridge.syncArchiveFromLegacy(id)
         id
     }
 
@@ -177,6 +180,7 @@ class ArchiveRepositoryImpl @Inject constructor(
         if (switchToNew) {
             switchArchive(newArchiveId)
         }
+        frozenDataBridge.syncArchiveFromLegacy(newArchiveId)
         newArchiveId
     }
 
@@ -189,12 +193,14 @@ class ArchiveRepositoryImpl @Inject constructor(
                 updatedAt = timeProvider.nowMillis(),
             ),
         )
+        frozenDataBridge.syncArchiveFromLegacy(id)
     }
 
     override suspend fun deleteArchive(id: Long) {
         val archive = checkNotNull(archiveDao.getById(id)) { "存档不存在。" }
         require(!archive.isReadOnly) { "示范存档不可删除。" }
         archiveDao.deleteById(id)
+        frozenDataBridge.deleteArchive(id)
         val fallback = archiveDao.findByType(ArchiveType.DEMO.code) ?: archiveDao.getAll().firstOrNull()
         fallback?.let { switchArchive(it.id) }
     }
@@ -208,6 +214,7 @@ class ArchiveRepositoryImpl @Inject constructor(
         archiveDao.findByType(ArchiveType.DEMO.code)?.let { archiveDao.deleteById(it.id) }
         val demoArchiveId = createDemoArchive()
         switchArchive(demoArchiveId)
+        frozenDataBridge.syncArchiveFromLegacy(demoArchiveId)
         demoArchiveId
     }
 
@@ -230,6 +237,9 @@ class ArchiveRepositoryImpl @Inject constructor(
             demoArchiveId = demoArchiveId,
             currentArchiveId = getCurrentArchiveId(),
         )
+            .also {
+                frozenDataBridge.rebuildAllFromLegacy()
+            }
     }
 
     private fun currentArchiveIdFlow(): Flow<Long?> {
@@ -284,12 +294,15 @@ class ArchiveRepositoryImpl @Inject constructor(
     }
 
     private suspend fun seedDemoBeans(archiveId: Long, now: Long): Map<String, Long> {
+        val roastBaseDate = java.time.Instant.ofEpochMilli(now)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
         val beans = listOf(
-            BeanProfileEntity(archiveId = archiveId, name = "埃塞俄比亚 花魁", roaster = "Qoffee Lab", origin = "耶加雪菲", processValue = BeanProcessMethod.NATURAL.storageValue, variety = "74110", roastLevelValue = RoastLevel.LIGHT_MEDIUM.storageValue, roastDateEpochDay = null, notes = "花果香型示范豆", createdAt = now),
-            BeanProfileEntity(archiveId = archiveId, name = "肯尼亚 AA", roaster = "Qoffee Lab", origin = "涅里", processValue = BeanProcessMethod.WASHED.storageValue, variety = "SL28", roastLevelValue = RoastLevel.LIGHT.storageValue, roastDateEpochDay = null, notes = "高酸质示范豆", createdAt = now),
-            BeanProfileEntity(archiveId = archiveId, name = "巴拿马 波奎特", roaster = "Qoffee Lab", origin = "波奎特", processValue = BeanProcessMethod.HONEY.storageValue, variety = "卡杜艾", roastLevelValue = RoastLevel.MEDIUM.storageValue, roastDateEpochDay = null, notes = "蜜处理示范豆", createdAt = now),
-            BeanProfileEntity(archiveId = archiveId, name = "哥伦比亚 慧兰", roaster = "Qoffee Lab", origin = "慧兰", processValue = BeanProcessMethod.WASHED.storageValue, variety = "卡斯蒂略", roastLevelValue = RoastLevel.MEDIUM_DARK.storageValue, roastDateEpochDay = null, notes = "均衡型示范豆", createdAt = now),
-            BeanProfileEntity(archiveId = archiveId, name = "巴西 皇后庄园", roaster = "Qoffee Lab", origin = "米纳斯", processValue = BeanProcessMethod.NATURAL.storageValue, variety = "黄波旁", roastLevelValue = RoastLevel.DARK.storageValue, roastDateEpochDay = null, notes = "坚果可可示范豆", createdAt = now),
+            BeanProfileEntity(archiveId = archiveId, name = "埃塞俄比亚 花魁", roaster = "Qoffee Lab", origin = "耶加雪菲", processValue = BeanProcessMethod.NATURAL.storageValue, variety = "74110", roastLevelValue = RoastLevel.LIGHT_MEDIUM.storageValue, roastDateEpochDay = roastBaseDate.minusDays(12).toEpochDay(), initialStockG = 250.0, notes = "花果香型示范豆", createdAt = now),
+            BeanProfileEntity(archiveId = archiveId, name = "肯尼亚 AA", roaster = "Qoffee Lab", origin = "涅里", processValue = BeanProcessMethod.WASHED.storageValue, variety = "SL28", roastLevelValue = RoastLevel.LIGHT.storageValue, roastDateEpochDay = roastBaseDate.minusDays(18).toEpochDay(), initialStockG = 250.0, notes = "高酸质示范豆", createdAt = now),
+            BeanProfileEntity(archiveId = archiveId, name = "巴拿马 波奎特", roaster = "Qoffee Lab", origin = "波奎特", processValue = BeanProcessMethod.HONEY.storageValue, variety = "卡杜艾", roastLevelValue = RoastLevel.MEDIUM.storageValue, roastDateEpochDay = roastBaseDate.minusDays(26).toEpochDay(), initialStockG = 250.0, notes = "蜜处理示范豆", createdAt = now),
+            BeanProfileEntity(archiveId = archiveId, name = "哥伦比亚 慧兰", roaster = "Qoffee Lab", origin = "慧兰", processValue = BeanProcessMethod.WASHED.storageValue, variety = "卡斯蒂略", roastLevelValue = RoastLevel.MEDIUM_DARK.storageValue, roastDateEpochDay = roastBaseDate.minusDays(34).toEpochDay(), initialStockG = 300.0, notes = "均衡型示范豆", createdAt = now),
+            BeanProfileEntity(archiveId = archiveId, name = "巴西 皇后庄园", roaster = "Qoffee Lab", origin = "米纳斯", processValue = BeanProcessMethod.NATURAL.storageValue, variety = "黄波旁", roastLevelValue = RoastLevel.DARK.storageValue, roastDateEpochDay = roastBaseDate.minusDays(45).toEpochDay(), initialStockG = 500.0, notes = "坚果可可示范豆", createdAt = now),
         )
         return beans.associate { bean ->
             bean.name to beanProfileDao.insert(bean)
@@ -440,6 +453,7 @@ class ArchiveRepositoryImpl @Inject constructor(
                     waterTempC = if (scenario.method.isHotBrew) scenario.temp else null,
                     notes = buildDemoNote(score, scenario.method, scenario.tags),
                     brewedAt = now - scenario.dayOffset * 24L * 60L * 60L * 1000L,
+                    brewDurationSeconds = buildDemoDurationSeconds(scenario.method, index),
                     createdAt = now,
                     updatedAt = now,
                     totalWaterMl = totalWater,
@@ -516,15 +530,27 @@ class ArchiveRepositoryImpl @Inject constructor(
         }
         val variation = ((index % 5) - 2) * 0.15
         val score = 9.2 - tempPenalty - ratioPenalty - grindPenalty + roastBonus + variation
-        return score.roundToInt().coerceIn(4, 10)
+        return legacyTenPointScoreToFivePoint(score.roundToInt().coerceIn(4, 10))
+    }
+
+    private fun buildDemoDurationSeconds(method: BrewMethod, index: Int): Int {
+        val baseline = when (method) {
+            BrewMethod.POUR_OVER -> 165
+            BrewMethod.CLEVER_DRIPPER -> 150
+            BrewMethod.AEROPRESS -> 95
+            BrewMethod.ESPRESSO_MACHINE -> 30
+            BrewMethod.COLD_BREW -> 36_000
+            BrewMethod.MOKA_POT -> 150
+        }
+        return (baseline + ((index % 5) - 2) * 8).coerceAtLeast(20)
     }
 
     private fun buildDemoNote(score: Int, method: BrewMethod, tags: List<String>): String {
         val methodText = method.displayName
         val flavorText = tags.joinToString("、")
-        return if (score >= 9) {
+        return if (score >= 5) {
             "$methodText 下表现非常稳定，风味集中在 $flavorText。"
-        } else if (score <= 6) {
+        } else if (score <= 2) {
             "$methodText 参数偏离最佳区间，整体显得略失衡。"
         } else {
             "$methodText 保持了不错的均衡感，主体风味是 $flavorText。"

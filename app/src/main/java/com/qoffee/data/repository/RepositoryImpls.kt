@@ -12,14 +12,20 @@ import com.qoffee.core.model.AnalysisTimeRange
 import com.qoffee.core.model.BeanProfile
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
+import com.qoffee.core.model.DraftReplacePolicy
 import com.qoffee.core.model.FlavorTag
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.ObjectiveDraftUpdate
+import com.qoffee.core.model.RecordPrefillSource
 import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RecordValidationResult
 import com.qoffee.core.model.SubjectiveEvaluation
 import com.qoffee.core.model.UserSettings
+import com.qoffee.core.model.WaterCurve
+import com.qoffee.core.model.WaterCurveDerivedValues
+import com.qoffee.core.model.WaterCurveJsonCodec
+import com.qoffee.core.model.deriveValues
 import com.qoffee.core.records.RecordValidator
 import com.qoffee.data.local.ArchiveDao
 import com.qoffee.data.local.BeanProfileDao
@@ -60,6 +66,7 @@ class CatalogRepositoryImpl @Inject constructor(
     private val flavorTagDao: FlavorTagDao,
     private val dataStore: DataStore<Preferences>,
     private val timeProvider: TimeProvider,
+    private val frozenDataBridge: FrozenDataBridge,
 ) : CatalogRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -93,6 +100,8 @@ class CatalogRepositoryImpl @Inject constructor(
         } else {
             beanProfileDao.update(entity)
             profile.id
+        }.also { beanId ->
+            frozenDataBridge.upsertBeanProfileFromLegacy(beanId)
         }
     }
 
@@ -108,7 +117,25 @@ class CatalogRepositoryImpl @Inject constructor(
         } else {
             grinderProfileDao.update(entity)
             profile.id
+        }.also { grinderId ->
+            frozenDataBridge.upsertGrinderFromLegacy(grinderId)
         }
+    }
+
+    override suspend fun deleteBeanProfile(id: Long) {
+        val archiveId = requireCurrentArchiveId()
+        ensureArchiveWritable(archiveId)
+        beanProfileDao.deleteById(id)
+        clearDeletedDefaults(beanId = id)
+        frozenDataBridge.softDeleteBeanProfile(id)
+    }
+
+    override suspend fun deleteGrinderProfile(id: Long) {
+        val archiveId = requireCurrentArchiveId()
+        ensureArchiveWritable(archiveId)
+        grinderProfileDao.deleteById(id)
+        clearDeletedDefaults(grinderId = id)
+        frozenDataBridge.softDeleteGrinder(id)
     }
 
     override suspend fun ensureFlavorTag(name: String): FlavorTag {
@@ -157,6 +184,16 @@ class CatalogRepositoryImpl @Inject constructor(
     private suspend fun ensureArchiveWritable(archiveId: Long) {
         check(!(archiveDao.getById(archiveId)?.isReadOnly ?: false)) { "当前存档为只读，不能修改内容。" }
     }
+    private suspend fun clearDeletedDefaults(beanId: Long? = null, grinderId: Long? = null) {
+        dataStore.edit { prefs ->
+            if (beanId != null && prefs[PreferenceKeys.DEFAULT_BEAN_ID] == beanId) {
+                prefs.remove(PreferenceKeys.DEFAULT_BEAN_ID)
+            }
+            if (grinderId != null && prefs[PreferenceKeys.DEFAULT_GRINDER_ID] == grinderId) {
+                prefs.remove(PreferenceKeys.DEFAULT_GRINDER_ID)
+            }
+        }
+    }
 }
 
 @Singleton
@@ -167,6 +204,7 @@ class RecipeRepositoryImpl @Inject constructor(
     private val recipeTemplateDao: RecipeTemplateDao,
     private val dataStore: DataStore<Preferences>,
     private val timeProvider: TimeProvider,
+    private val frozenDataBridge: FrozenDataBridge,
 ) : RecipeRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -184,10 +222,21 @@ class RecipeRepositoryImpl @Inject constructor(
         val bean = template.beanProfileId?.let { beanProfileDao.getById(it) }
         val grinder = template.grinderProfileId?.let { grinderProfileDao.getById(it) }
         val now = timeProvider.nowMillis()
+        val derived = resolveWaterCurveDerivedValues(
+            waterCurve = template.waterCurve,
+            brewWaterMl = template.brewWaterMl,
+            bypassWaterMl = template.bypassWaterMl,
+            waterTempC = template.waterTempC,
+            brewDurationSeconds = null,
+            coffeeDoseG = template.coffeeDoseG,
+        )
         val entity = template.copy(
             archiveId = template.archiveId.takeIf { it > 0 } ?: archiveId,
             beanNameSnapshot = bean?.name ?: template.beanNameSnapshot,
             grinderNameSnapshot = grinder?.name ?: template.grinderNameSnapshot,
+            brewWaterMl = derived.brewWaterMl,
+            bypassWaterMl = derived.bypassWaterMl,
+            waterTempC = derived.waterTempC,
             createdAt = template.createdAt.takeIf { it > 0 } ?: now,
             updatedAt = now,
         ).toEntity()
@@ -196,6 +245,8 @@ class RecipeRepositoryImpl @Inject constructor(
         } else {
             recipeTemplateDao.update(entity)
             template.id
+        }.also { recipeId ->
+            frozenDataBridge.upsertRecipeFromLegacy(recipeId)
         }
     }
 
@@ -203,6 +254,7 @@ class RecipeRepositoryImpl @Inject constructor(
         val archiveId = requireCurrentArchiveId()
         ensureArchiveWritable(archiveId)
         recipeTemplateDao.deleteById(id)
+        frozenDataBridge.softDeleteRecipe(id)
     }
 
     private fun currentArchiveIdFlow(): Flow<Long?> =
@@ -230,6 +282,7 @@ class RecordRepositoryImpl @Inject constructor(
     private val dataStore: DataStore<Preferences>,
     private val validator: RecordValidator,
     private val timeProvider: TimeProvider,
+    private val frozenDataBridge: FrozenDataBridge,
 ) : RecordRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -268,48 +321,70 @@ class RecordRepositoryImpl @Inject constructor(
         return brewRecordDao.getActiveDraft(archiveId)?.id
     }
 
-    override suspend fun createEmptyDraft(replaceActiveDraft: Boolean): Long = database.withTransaction {
+    override suspend fun createDraft(
+        prefillSource: RecordPrefillSource,
+        replacePolicy: DraftReplacePolicy,
+    ): Long = database.withTransaction {
         val archiveId = requireCurrentArchiveId()
         ensureArchiveWritable(archiveId)
         val activeDraft = brewRecordDao.getActiveDraft(archiveId)
-        if (activeDraft != null && !replaceActiveDraft) {
-            return@withTransaction activeDraft.id
-        }
-        if (activeDraft != null) {
-            brewRecordDao.deleteDrafts(archiveId)
-        }
-        insertEmptyDraft(archiveId)
-    }
-
-    override suspend fun createDraftFromRecipe(recipeId: Long, replaceActiveDraft: Boolean): Long = database.withTransaction {
-        val archiveId = requireCurrentArchiveId()
-        ensureArchiveWritable(archiveId)
-        val recipe = checkNotNull(recipeTemplateDao.getById(recipeId)) { "配方不存在。" }
-        val activeDraft = brewRecordDao.getActiveDraft(archiveId)
-        val draftId = if (activeDraft != null && !replaceActiveDraft) {
-            activeDraft.id
-        } else {
-            if (activeDraft != null) {
+        val reusableDraftId = when {
+            activeDraft != null && replacePolicy == DraftReplacePolicy.KEEP_CURRENT -> activeDraft.id
+            activeDraft != null && replacePolicy == DraftReplacePolicy.REPLACE_CURRENT -> {
                 brewRecordDao.deleteDrafts(archiveId)
+                null
             }
-            insertEmptyDraft(archiveId)
+            else -> null
         }
-        val current = checkNotNull(brewRecordDao.getEntityById(draftId)) { "记录不存在。" }
-        brewRecordDao.update(applyRecipeToEntity(current, recipe))
+
+        val draftId = when (prefillSource) {
+            RecordPrefillSource.Blank,
+            RecordPrefillSource.Draft -> reusableDraftId ?: insertEmptyDraft(archiveId)
+
+            is RecordPrefillSource.Recipe -> {
+                reusableDraftId ?: createRecipePrefilledDraft(
+                    archiveId = archiveId,
+                    recipeId = prefillSource.recipeId,
+                )
+            }
+
+            is RecordPrefillSource.Record -> {
+                reusableDraftId ?: createRecordPrefilledDraft(
+                    archiveId = archiveId,
+                    recordId = prefillSource.recordId,
+                )
+            }
+
+            is RecordPrefillSource.Bean -> {
+                reusableDraftId ?: createBeanPrefilledDraft(
+                    archiveId = archiveId,
+                    beanId = prefillSource.beanId,
+                )
+            }
+        }
+        frozenDataBridge.upsertRunFromLegacy(draftId)
         draftId
     }
 
-    override suspend fun getOrCreateActiveDraftId(autoRestore: Boolean): Long = database.withTransaction {
-        val archiveId = requireCurrentArchiveId()
-        ensureArchiveWritable(archiveId)
-        val activeDraft = brewRecordDao.getActiveDraft(archiveId)
-        if (activeDraft != null && autoRestore) {
-            return@withTransaction activeDraft.id
-        }
-        if (activeDraft != null && !autoRestore) {
-            brewRecordDao.deleteDrafts(archiveId)
-        }
-        insertEmptyDraft(archiveId)
+    override suspend fun createEmptyDraft(replaceActiveDraft: Boolean): Long {
+        return createDraft(
+            prefillSource = RecordPrefillSource.Blank,
+            replacePolicy = if (replaceActiveDraft) DraftReplacePolicy.REPLACE_CURRENT else DraftReplacePolicy.KEEP_CURRENT,
+        )
+    }
+
+    override suspend fun createDraftFromRecipe(recipeId: Long, replaceActiveDraft: Boolean): Long {
+        return createDraft(
+            prefillSource = RecordPrefillSource.Recipe(recipeId),
+            replacePolicy = if (replaceActiveDraft) DraftReplacePolicy.REPLACE_CURRENT else DraftReplacePolicy.KEEP_CURRENT,
+        )
+    }
+
+    override suspend fun getOrCreateActiveDraftId(autoRestore: Boolean): Long {
+        return createDraft(
+            prefillSource = RecordPrefillSource.Draft,
+            replacePolicy = if (autoRestore) DraftReplacePolicy.KEEP_CURRENT else DraftReplacePolicy.REPLACE_CURRENT,
+        )
     }
 
     override suspend fun applyRecipeToDraft(recordId: Long, recipeId: Long) {
@@ -319,6 +394,7 @@ class RecordRepositoryImpl @Inject constructor(
             val recipe = checkNotNull(recipeTemplateDao.getById(recipeId)) { "配方不存在。" }
             val current = checkNotNull(brewRecordDao.getEntityById(recordId)) { "记录不存在。" }
             brewRecordDao.update(applyRecipeToEntity(current, recipe))
+            frozenDataBridge.upsertRunFromLegacy(recordId)
         }
     }
 
@@ -339,7 +415,53 @@ class RecordRepositoryImpl @Inject constructor(
 
     override suspend fun duplicateLatestComparableAsDraft(beanId: Long?, brewMethod: BrewMethod?): Long? {
         val comparable = getLatestComparableRecord(beanId = beanId, brewMethod = brewMethod)
-        return comparable?.let { duplicateRecordAsDraft(it.id) }
+        return comparable?.let {
+            createDraft(
+                prefillSource = RecordPrefillSource.Record(it.id),
+                replacePolicy = DraftReplacePolicy.REPLACE_CURRENT,
+            )
+        }
+    }
+
+    override suspend fun saveRecordAsRecipe(recordId: Long, name: String, targetRecipeId: Long?): Long = database.withTransaction {
+        val archiveId = requireCurrentArchiveId()
+        ensureArchiveWritable(archiveId)
+        val record = checkNotNull(getRecord(recordId)) { "记录不存在。" }
+        val existingRecipe = targetRecipeId?.let { recipeTemplateDao.getById(it)?.toDomain() }
+        val resolvedName = name.trim()
+            .takeIf { it.isNotBlank() }
+            ?: existingRecipe?.name
+            ?: record.recipeNameSnapshot
+            ?: buildDefaultRecipeName(record)
+        val bean = record.beanProfileId?.let { beanProfileDao.getById(it) }
+        val grinder = record.grinderProfileId?.let { grinderProfileDao.getById(it) }
+        val now = timeProvider.nowMillis()
+        val entity = buildRecipeTemplateFromRecord(
+            record = record,
+            name = resolvedName,
+            archiveId = archiveId,
+            beanNameSnapshot = bean?.name ?: record.beanNameSnapshot,
+            grinderNameSnapshot = grinder?.name ?: record.grinderNameSnapshot,
+            existingRecipe = existingRecipe,
+            now = now,
+        ).toEntity()
+        val recipeId = if (existingRecipe == null) {
+            recipeTemplateDao.insert(entity)
+        } else {
+            recipeTemplateDao.update(entity)
+            existingRecipe.id
+        }
+        val currentRecord = checkNotNull(brewRecordDao.getEntityById(recordId)) { "记录不存在。" }
+        brewRecordDao.update(
+            currentRecord.copy(
+                recipeTemplateId = recipeId,
+                recipeNameSnapshot = resolvedName,
+                updatedAt = now,
+            ),
+        )
+        frozenDataBridge.upsertRecipeFromLegacy(recipeId)
+        frozenDataBridge.upsertRunFromLegacy(recordId)
+        recipeId
     }
 
     override suspend fun updateObjective(recordId: Long, update: ObjectiveDraftUpdate) {
@@ -348,16 +470,14 @@ class RecordRepositoryImpl @Inject constructor(
             val current = checkNotNull(brewRecordDao.getEntityById(recordId)) { "记录不存在。" }
             val bean = update.beanProfileId?.let { beanProfileDao.getById(it) }
             val grinder = update.grinderProfileId?.let { grinderProfileDao.getById(it) }
-            val totalWater = when {
-                update.brewWaterMl == null -> null
-                update.bypassWaterMl == null -> update.brewWaterMl
-                else -> update.brewWaterMl + update.bypassWaterMl
-            }
-            val brewRatio = if (totalWater != null && update.coffeeDoseG != null && update.coffeeDoseG > 0.0) {
-                totalWater / update.coffeeDoseG
-            } else {
-                null
-            }
+            val derived = resolveWaterCurveDerivedValues(
+                waterCurve = update.waterCurve,
+                brewWaterMl = update.brewWaterMl,
+                bypassWaterMl = update.bypassWaterMl,
+                waterTempC = update.waterTempC,
+                brewDurationSeconds = update.brewDurationSeconds,
+                coffeeDoseG = update.coffeeDoseG,
+            )
             brewRecordDao.update(
                 current.copy(
                     recipeTemplateId = update.recipeTemplateId,
@@ -371,15 +491,19 @@ class RecordRepositoryImpl @Inject constructor(
                     grinderNameSnapshot = grinder?.name,
                     grindSetting = update.grindSetting,
                     coffeeDoseG = update.coffeeDoseG,
-                    brewWaterMl = update.brewWaterMl,
-                    bypassWaterMl = update.bypassWaterMl,
-                    waterTempC = update.waterTempC,
+                    brewWaterMl = derived.brewWaterMl,
+                    bypassWaterMl = derived.bypassWaterMl,
+                    waterTempC = derived.waterTempC,
+                    waterCurveJson = WaterCurveJsonCodec.encode(update.waterCurve),
+                    brewedAt = update.brewedAt ?: current.brewedAt,
+                    brewDurationSeconds = derived.brewDurationSeconds,
                     notes = update.notes,
                     updatedAt = timeProvider.nowMillis(),
-                    totalWaterMl = totalWater,
-                    brewRatio = brewRatio,
+                    totalWaterMl = derived.totalWaterMl,
+                    brewRatio = derived.brewRatio,
                 ),
             )
+            frozenDataBridge.upsertRunFromLegacy(recordId)
         }
     }
 
@@ -390,6 +514,7 @@ class RecordRepositoryImpl @Inject constructor(
             if (evaluation.isEmpty()) {
                 subjectiveEvaluationDao.deleteByRecordId(recordId)
                 recordFlavorTagDao.deleteForRecord(recordId)
+                frozenDataBridge.upsertRunFromLegacy(recordId)
                 return@withTransaction
             }
             subjectiveEvaluationDao.upsert(evaluation.copy(recordId = recordId).toEntity())
@@ -409,6 +534,7 @@ class RecordRepositoryImpl @Inject constructor(
                 }
             }.filter { it > 0L }
             recordFlavorTagDao.insertAll(tagIds.map { RecordFlavorTagCrossRef(recordId, it) })
+            frozenDataBridge.upsertRunFromLegacy(recordId)
         }
     }
 
@@ -426,14 +552,53 @@ class RecordRepositoryImpl @Inject constructor(
                 updatedAt = timeProvider.nowMillis(),
             ),
         )
+        frozenDataBridge.upsertRunFromLegacy(recordId)
         RecordValidationResult.success()
     }
 
-    override suspend fun duplicateRecordAsDraft(recordId: Long): Long = database.withTransaction {
-        val archiveId = requireCurrentArchiveId()
-        ensureArchiveWritable(archiveId)
+    override suspend fun duplicateRecordAsDraft(recordId: Long): Long {
+        return createDraft(
+            prefillSource = RecordPrefillSource.Record(recordId),
+            replacePolicy = DraftReplacePolicy.REPLACE_CURRENT,
+        )
+    }
+
+    override suspend fun deleteRecord(recordId: Long) {
+        database.withTransaction {
+            ensureArchiveWritable(requireCurrentArchiveId())
+            brewRecordDao.deleteById(recordId)
+            frozenDataBridge.deleteRun(recordId)
+        }
+    }
+
+    private suspend fun createRecipePrefilledDraft(archiveId: Long, recipeId: Long): Long {
+        val recipe = checkNotNull(recipeTemplateDao.getById(recipeId)) { "配方不存在。" }
+        val draftId = insertEmptyDraft(archiveId)
+        val current = checkNotNull(brewRecordDao.getEntityById(draftId)) { "记录不存在。" }
+        brewRecordDao.update(applyRecipeToEntity(current, recipe))
+        return draftId
+    }
+
+    private suspend fun createBeanPrefilledDraft(archiveId: Long, beanId: Long): Long {
+        val bean = checkNotNull(beanProfileDao.getById(beanId)) { "咖啡豆不存在。" }
+        val draftId = insertEmptyDraft(archiveId)
+        val current = checkNotNull(brewRecordDao.getEntityById(draftId)) { "记录不存在。" }
+        brewRecordDao.update(
+            current.copy(
+                recipeTemplateId = null,
+                recipeNameSnapshot = null,
+                beanId = bean.id,
+                beanNameSnapshot = bean.name,
+                beanRoastLevelSnapshotValue = bean.roastLevelValue,
+                beanProcessMethodSnapshotValue = bean.processValue,
+                updatedAt = timeProvider.nowMillis(),
+            ),
+        )
+        return draftId
+    }
+
+    private suspend fun createRecordPrefilledDraft(archiveId: Long, recordId: Long): Long {
         val source = checkNotNull(brewRecordDao.getById(recordId)) { "记录不存在。" }
-        brewRecordDao.deleteDrafts(archiveId)
         val now = timeProvider.nowMillis()
         val newId = brewRecordDao.insert(
             source.record.copy(
@@ -455,7 +620,13 @@ class RecordRepositoryImpl @Inject constructor(
                 },
             )
         }
-        newId
+        return newId
+    }
+
+    private fun buildDefaultRecipeName(record: CoffeeRecord): String {
+        val beanName = record.beanNameSnapshot ?: "未命名豆子"
+        val methodName = record.brewMethod?.displayName ?: "记录"
+        return "$beanName $methodName"
     }
 
     private suspend fun insertEmptyDraft(archiveId: Long): Long {
@@ -478,8 +649,10 @@ class RecordRepositoryImpl @Inject constructor(
                 brewWaterMl = null,
                 bypassWaterMl = null,
                 waterTempC = null,
+                waterCurveJson = null,
                 notes = "",
                 brewedAt = now,
+                brewDurationSeconds = null,
                 createdAt = now,
                 updatedAt = now,
                 totalWaterMl = null,
@@ -494,16 +667,15 @@ class RecordRepositoryImpl @Inject constructor(
     ): BrewRecordEntity {
         val bean = recipe.beanId?.let { beanProfileDao.getById(it) }
         val grinder = recipe.grinderId?.let { grinderProfileDao.getById(it) }
-        val totalWater = when {
-            recipe.brewWaterMl == null -> null
-            recipe.bypassWaterMl == null -> recipe.brewWaterMl
-            else -> recipe.brewWaterMl + recipe.bypassWaterMl
-        }
-        val brewRatio = if (totalWater != null && recipe.coffeeDoseG != null && recipe.coffeeDoseG > 0.0) {
-            totalWater / recipe.coffeeDoseG
-        } else {
-            null
-        }
+        val waterCurve = WaterCurveJsonCodec.decode(recipe.waterCurveJson)
+        val derived = resolveWaterCurveDerivedValues(
+            waterCurve = waterCurve,
+            brewWaterMl = recipe.brewWaterMl,
+            bypassWaterMl = recipe.bypassWaterMl,
+            waterTempC = recipe.waterTempC,
+            brewDurationSeconds = null,
+            coffeeDoseG = recipe.coffeeDoseG,
+        )
         return current.copy(
             recipeTemplateId = recipe.id,
             recipeNameSnapshot = recipe.name,
@@ -516,13 +688,15 @@ class RecordRepositoryImpl @Inject constructor(
             grinderNameSnapshot = grinder?.name ?: recipe.grinderNameSnapshot,
             grindSetting = recipe.grindSetting,
             coffeeDoseG = recipe.coffeeDoseG,
-            brewWaterMl = recipe.brewWaterMl,
-            bypassWaterMl = recipe.bypassWaterMl,
-            waterTempC = recipe.waterTempC,
+            brewWaterMl = derived.brewWaterMl,
+            bypassWaterMl = derived.bypassWaterMl,
+            waterTempC = derived.waterTempC,
+            waterCurveJson = recipe.waterCurveJson,
+            brewDurationSeconds = derived.brewDurationSeconds,
             notes = recipe.notes,
             updatedAt = timeProvider.nowMillis(),
-            totalWaterMl = totalWater,
-            brewRatio = brewRatio,
+            totalWaterMl = derived.totalWaterMl,
+            brewRatio = derived.brewRatio,
         )
     }
 
@@ -535,6 +709,75 @@ class RecordRepositoryImpl @Inject constructor(
     private suspend fun ensureArchiveWritable(archiveId: Long) {
         check(!(archiveDao.getById(archiveId)?.isReadOnly ?: false)) { "当前存档为只读，不能修改内容。" }
     }
+}
+
+internal fun buildRecipeTemplateFromRecord(
+    record: CoffeeRecord,
+    name: String,
+    archiveId: Long,
+    beanNameSnapshot: String?,
+    grinderNameSnapshot: String?,
+    existingRecipe: RecipeTemplate? = null,
+    now: Long,
+): RecipeTemplate {
+    val derived = resolveWaterCurveDerivedValues(
+        waterCurve = record.waterCurve,
+        brewWaterMl = record.brewWaterMl,
+        bypassWaterMl = record.bypassWaterMl,
+        waterTempC = record.waterTempC,
+        brewDurationSeconds = record.brewDurationSeconds,
+        coffeeDoseG = record.coffeeDoseG,
+    )
+    return RecipeTemplate(
+        id = existingRecipe?.id ?: 0L,
+        archiveId = existingRecipe?.archiveId ?: archiveId,
+        name = name,
+        brewMethod = record.brewMethod,
+        beanProfileId = record.beanProfileId,
+        beanNameSnapshot = beanNameSnapshot ?: record.beanNameSnapshot,
+        grinderProfileId = record.grinderProfileId,
+        grinderNameSnapshot = grinderNameSnapshot ?: record.grinderNameSnapshot,
+        grindSetting = record.grindSetting,
+        coffeeDoseG = record.coffeeDoseG,
+        brewWaterMl = derived.brewWaterMl,
+        bypassWaterMl = derived.bypassWaterMl,
+        waterTempC = derived.waterTempC,
+        waterCurve = record.waterCurve,
+        notes = record.notes,
+        createdAt = existingRecipe?.createdAt ?: now,
+        updatedAt = now,
+    )
+}
+
+private fun resolveWaterCurveDerivedValues(
+    waterCurve: WaterCurve?,
+    brewWaterMl: Double?,
+    bypassWaterMl: Double?,
+    waterTempC: Double?,
+    brewDurationSeconds: Int?,
+    coffeeDoseG: Double?,
+): WaterCurveDerivedValues {
+    if (waterCurve != null) {
+        return waterCurve.deriveValues(coffeeDoseG)
+    }
+    val totalWater = when {
+        brewWaterMl == null -> null
+        bypassWaterMl == null -> brewWaterMl
+        else -> brewWaterMl + bypassWaterMl
+    }
+    val brewRatio = if (totalWater != null && coffeeDoseG != null && coffeeDoseG > 0.0) {
+        totalWater / coffeeDoseG
+    } else {
+        null
+    }
+    return WaterCurveDerivedValues(
+        brewWaterMl = brewWaterMl,
+        bypassWaterMl = bypassWaterMl,
+        waterTempC = waterTempC,
+        brewDurationSeconds = brewDurationSeconds,
+        totalWaterMl = totalWater,
+        brewRatio = brewRatio,
+    )
 }
 
 @Singleton
@@ -568,9 +811,12 @@ class PreferenceRepositoryImpl @Inject constructor(
             UserSettings(
                 autoRestoreDraft = prefs[PreferenceKeys.AUTO_RESTORE_DRAFT] ?: true,
                 showInsightConfidence = prefs[PreferenceKeys.SHOW_CONFIDENCE] ?: true,
+                showLearnInDock = prefs[PreferenceKeys.SHOW_LEARN_IN_DOCK] ?: false,
                 defaultAnalysisTimeRange = AnalysisTimeRange.entries.firstOrNull {
                     it.name == prefs[PreferenceKeys.DEFAULT_ANALYSIS_RANGE]
                 } ?: AnalysisTimeRange.LAST_90_DAYS,
+                defaultBeanProfileId = prefs[PreferenceKeys.DEFAULT_BEAN_ID],
+                defaultGrinderProfileId = prefs[PreferenceKeys.DEFAULT_GRINDER_ID],
             )
         }
     }
@@ -585,5 +831,29 @@ class PreferenceRepositoryImpl @Inject constructor(
 
     override suspend fun setDefaultAnalysisTimeRange(range: AnalysisTimeRange) {
         dataStore.edit { prefs -> prefs[PreferenceKeys.DEFAULT_ANALYSIS_RANGE] = range.name }
+    }
+
+    override suspend fun setDefaultBeanProfile(beanId: Long?) {
+        dataStore.edit { prefs ->
+            if (beanId == null || beanId <= 0L) {
+                prefs.remove(PreferenceKeys.DEFAULT_BEAN_ID)
+            } else {
+                prefs[PreferenceKeys.DEFAULT_BEAN_ID] = beanId
+            }
+        }
+    }
+
+    override suspend fun setDefaultGrinderProfile(grinderId: Long?) {
+        dataStore.edit { prefs ->
+            if (grinderId == null || grinderId <= 0L) {
+                prefs.remove(PreferenceKeys.DEFAULT_GRINDER_ID)
+            } else {
+                prefs[PreferenceKeys.DEFAULT_GRINDER_ID] = grinderId
+            }
+        }
+    }
+
+    override suspend fun setShowLearnInDock(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[PreferenceKeys.SHOW_LEARN_IN_DOCK] = enabled }
     }
 }

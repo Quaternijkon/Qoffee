@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qoffee.core.model.ArchiveSeedStatus
 import com.qoffee.core.model.ArchiveSummary
+import com.qoffee.core.model.UserSettings
 import com.qoffee.domain.repository.ArchiveRepository
+import com.qoffee.domain.repository.PreferenceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,11 +19,13 @@ data class AppUiState(
     val archives: List<ArchiveSummary> = emptyList(),
     val currentArchive: ArchiveSummary? = null,
     val seedStatus: ArchiveSeedStatus = ArchiveSeedStatus(),
+    val settings: UserSettings = UserSettings(),
 )
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
     private val archiveRepository: ArchiveRepository,
+    preferenceRepository: PreferenceRepository,
 ) : ViewModel() {
 
     private val seedStatusInternal = kotlinx.coroutines.flow.MutableStateFlow(ArchiveSeedStatus())
@@ -30,11 +34,13 @@ class AppViewModel @Inject constructor(
         archiveRepository.observeArchives(),
         archiveRepository.observeCurrentArchive(),
         seedStatusInternal,
-    ) { archives, currentArchive, seedStatus ->
+        preferenceRepository.observeSettings(),
+    ) { archives, currentArchive, seedStatus, settings ->
         AppUiState(
             archives = archives,
             currentArchive = currentArchive,
             seedStatus = seedStatus,
+            settings = settings,
         )
     }.stateIn(
         scope = viewModelScope,

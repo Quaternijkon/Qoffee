@@ -4,7 +4,11 @@ import com.google.common.truth.Truth.assertThat
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.GrinderProfile
+import com.qoffee.core.model.PourStage
 import com.qoffee.core.model.RecordStatus
+import com.qoffee.core.model.WaitStage
+import com.qoffee.core.model.WaterCurve
+import com.qoffee.core.model.WaterCurveTemperatureMode
 import org.junit.Test
 
 class RecordValidatorTest {
@@ -61,6 +65,49 @@ class RecordValidatorTest {
 
         assertThat(result.isValid).isFalse()
         assertThat(result.errors.single()).contains("研磨格数需要落在")
+    }
+
+    @Test
+    fun invalidWaterCurveFailsValidationEvenWhenSummaryFieldsExist() {
+        val result = validator.validate(
+            record = baseRecord.copy(
+                brewMethod = BrewMethod.POUR_OVER,
+                waterTempC = 92.0,
+                waterCurve = WaterCurve(
+                    temperatureMode = WaterCurveTemperatureMode.POUR_WATER,
+                    stages = listOf(
+                        PourStage(endTimeSeconds = 60, cumulativeWaterMl = 120.0, quickTemperatureC = 92.0),
+                        WaitStage(endTimeSeconds = 30),
+                    ),
+                ),
+            ),
+            grinderProfile = null,
+        )
+
+        assertThat(result.isValid).isFalse()
+        assertThat(result.errors).isNotEmpty()
+    }
+
+    @Test
+    fun missingAmbientAndContainerDoNotBlockSavingCurve() {
+        val result = validator.validate(
+            record = baseRecord.copy(
+                brewMethod = BrewMethod.POUR_OVER,
+                waterTempC = 92.0,
+                waterCurve = WaterCurve(
+                    temperatureMode = WaterCurveTemperatureMode.POUR_WATER,
+                    ambientTempC = null,
+                    containerType = null,
+                    stages = listOf(
+                        PourStage(endTimeSeconds = 30, cumulativeWaterMl = 120.0, quickTemperatureC = 92.0),
+                        WaitStage(endTimeSeconds = 90),
+                    ),
+                ),
+            ),
+            grinderProfile = null,
+        )
+
+        assertThat(result.isValid).isTrue()
     }
 
     private val baseRecord = CoffeeRecord(

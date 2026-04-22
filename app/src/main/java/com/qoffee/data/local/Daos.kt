@@ -68,6 +68,9 @@ interface BeanProfileDao {
 
     @Update
     suspend fun update(entity: BeanProfileEntity)
+
+    @Query("DELETE FROM bean_profiles WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 @Dao
@@ -86,6 +89,9 @@ interface GrinderProfileDao {
 
     @Update
     suspend fun update(entity: GrinderProfileEntity)
+
+    @Query("DELETE FROM grinder_profiles WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 @Dao
@@ -186,6 +192,9 @@ interface BrewRecordDao {
 
     @Query("DELETE FROM brew_records WHERE archiveId = :archiveId AND status = 'draft'")
     suspend fun deleteDrafts(archiveId: Long)
+
+    @Query("DELETE FROM brew_records WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 @Dao

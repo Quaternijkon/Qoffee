@@ -52,7 +52,7 @@ fun MethodBarChart(
     ) {
         val leftPadding = 12.dp.toPx()
         val bottomPadding = 34.dp.toPx()
-        val maxValue = max(10f, values.maxOf { it.averageScore }.toFloat())
+        val maxValue = max(5f, values.maxOf { it.averageScore }.toFloat())
         val step = (size.width - leftPadding * 2f) / values.size.coerceAtLeast(1)
         val barWidth = step * 0.62f
         val labelPaint = Paint().apply {
@@ -112,6 +112,7 @@ fun MethodBarChart(
 @Composable
 fun ScoreTrendChart(
     points: List<TimelinePoint>,
+    scoreRange: IntRange = 1..5,
     modifier: Modifier = Modifier,
 ) {
     if (points.size < 2) {
@@ -139,8 +140,8 @@ fun ScoreTrendChart(
         val plotWidth = size.width - leftPadding - rightPadding
         val plotHeight = size.height - topPadding - bottomPadding
         val stepX = plotWidth / (points.size - 1).coerceAtLeast(1)
-        val minScore = 1f
-        val maxScore = 10f
+        val minScore = scoreRange.first.toFloat()
+        val maxScore = scoreRange.last.toFloat()
         val labelPaint = Paint().apply {
             color = axisLabelColor.toArgb()
             textSize = 11.dp.toPx()
@@ -196,6 +197,7 @@ fun ScoreTrendChart(
 fun ScatterChart(
     points: List<ScatterPoint>,
     xLabel: String,
+    yRange: IntRange = 1..5,
     modifier: Modifier = Modifier,
 ) {
     if (points.isEmpty()) {
@@ -220,8 +222,8 @@ fun ScatterChart(
         val minX = points.minOf { it.x }
         val maxX = points.maxOf { it.x }
         val xSpan = (maxX - minX).takeIf { it > 0 } ?: 1.0
-        val minY = 1.0
-        val maxY = 10.0
+        val minY = yRange.first.toDouble()
+        val maxY = yRange.last.toDouble()
         val plotWidth = size.width - leftPadding - rightPadding
         val plotHeight = size.height - bottomPadding - topPadding
 

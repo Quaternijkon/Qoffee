@@ -1,0 +1,863 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 4,
+    "identityHash": "45f39dcc7ea116cb3e1d2d4ad6209845",
+    "entities": [
+      {
+        "tableName": "archives",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `typeCode` TEXT NOT NULL, `isReadOnly` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "typeCode",
+            "columnName": "typeCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isReadOnly",
+            "columnName": "isReadOnly",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "bean_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `archiveId` INTEGER NOT NULL, `name` TEXT NOT NULL, `roaster` TEXT NOT NULL, `origin` TEXT NOT NULL, `processValue` INTEGER NOT NULL, `variety` TEXT NOT NULL, `roastLevelValue` INTEGER NOT NULL, `roastDateEpochDay` INTEGER, `initialStockG` REAL, `notes` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, FOREIGN KEY(`archiveId`) REFERENCES `archives`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archiveId",
+            "columnName": "archiveId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roaster",
+            "columnName": "roaster",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "processValue",
+            "columnName": "processValue",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "variety",
+            "columnName": "variety",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roastLevelValue",
+            "columnName": "roastLevelValue",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roastDateEpochDay",
+            "columnName": "roastDateEpochDay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "initialStockG",
+            "columnName": "initialStockG",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_bean_profiles_archiveId",
+            "unique": false,
+            "columnNames": [
+              "archiveId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_bean_profiles_archiveId` ON `${TABLE_NAME}` (`archiveId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "archives",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "archiveId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "grinder_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `archiveId` INTEGER NOT NULL, `name` TEXT NOT NULL, `minSetting` REAL NOT NULL, `maxSetting` REAL NOT NULL, `stepSize` REAL NOT NULL, `unitLabel` TEXT NOT NULL, `notes` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, FOREIGN KEY(`archiveId`) REFERENCES `archives`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archiveId",
+            "columnName": "archiveId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minSetting",
+            "columnName": "minSetting",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxSetting",
+            "columnName": "maxSetting",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepSize",
+            "columnName": "stepSize",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitLabel",
+            "columnName": "unitLabel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_grinder_profiles_archiveId",
+            "unique": false,
+            "columnNames": [
+              "archiveId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grinder_profiles_archiveId` ON `${TABLE_NAME}` (`archiveId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "archives",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "archiveId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "recipe_templates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `archiveId` INTEGER NOT NULL, `name` TEXT NOT NULL, `brewMethodCode` TEXT, `beanId` INTEGER, `beanNameSnapshot` TEXT, `grinderId` INTEGER, `grinderNameSnapshot` TEXT, `grindSetting` REAL, `coffeeDoseG` REAL, `brewWaterMl` REAL, `bypassWaterMl` REAL, `waterTempC` REAL, `notes` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, FOREIGN KEY(`archiveId`) REFERENCES `archives`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`beanId`) REFERENCES `bean_profiles`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`grinderId`) REFERENCES `grinder_profiles`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archiveId",
+            "columnName": "archiveId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "brewMethodCode",
+            "columnName": "brewMethodCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "beanId",
+            "columnName": "beanId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "beanNameSnapshot",
+            "columnName": "beanNameSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grinderId",
+            "columnName": "grinderId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "grinderNameSnapshot",
+            "columnName": "grinderNameSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grindSetting",
+            "columnName": "grindSetting",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "coffeeDoseG",
+            "columnName": "coffeeDoseG",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "brewWaterMl",
+            "columnName": "brewWaterMl",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bypassWaterMl",
+            "columnName": "bypassWaterMl",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "waterTempC",
+            "columnName": "waterTempC",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recipe_templates_archiveId",
+            "unique": false,
+            "columnNames": [
+              "archiveId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_templates_archiveId` ON `${TABLE_NAME}` (`archiveId`)"
+          },
+          {
+            "name": "index_recipe_templates_beanId",
+            "unique": false,
+            "columnNames": [
+              "beanId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_templates_beanId` ON `${TABLE_NAME}` (`beanId`)"
+          },
+          {
+            "name": "index_recipe_templates_grinderId",
+            "unique": false,
+            "columnNames": [
+              "grinderId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_templates_grinderId` ON `${TABLE_NAME}` (`grinderId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "archives",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "archiveId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "bean_profiles",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "beanId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "grinder_profiles",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "grinderId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "brew_records",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `archiveId` INTEGER NOT NULL, `status` TEXT NOT NULL, `brewMethodCode` TEXT, `beanId` INTEGER, `beanNameSnapshot` TEXT, `beanRoastLevelSnapshotValue` INTEGER, `beanProcessMethodSnapshotValue` INTEGER, `recipeTemplateId` INTEGER, `recipeNameSnapshot` TEXT, `grinderId` INTEGER, `grinderNameSnapshot` TEXT, `grindSetting` REAL, `coffeeDoseG` REAL, `brewWaterMl` REAL, `bypassWaterMl` REAL, `waterTempC` REAL, `notes` TEXT NOT NULL, `brewedAt` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `totalWaterMl` REAL, `brewRatio` REAL, FOREIGN KEY(`archiveId`) REFERENCES `archives`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`beanId`) REFERENCES `bean_profiles`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`grinderId`) REFERENCES `grinder_profiles`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archiveId",
+            "columnName": "archiveId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "brewMethodCode",
+            "columnName": "brewMethodCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "beanId",
+            "columnName": "beanId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "beanNameSnapshot",
+            "columnName": "beanNameSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "beanRoastLevelSnapshotValue",
+            "columnName": "beanRoastLevelSnapshotValue",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "beanProcessMethodSnapshotValue",
+            "columnName": "beanProcessMethodSnapshotValue",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "recipeTemplateId",
+            "columnName": "recipeTemplateId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "recipeNameSnapshot",
+            "columnName": "recipeNameSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grinderId",
+            "columnName": "grinderId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "grinderNameSnapshot",
+            "columnName": "grinderNameSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grindSetting",
+            "columnName": "grindSetting",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "coffeeDoseG",
+            "columnName": "coffeeDoseG",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "brewWaterMl",
+            "columnName": "brewWaterMl",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bypassWaterMl",
+            "columnName": "bypassWaterMl",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "waterTempC",
+            "columnName": "waterTempC",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "brewedAt",
+            "columnName": "brewedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalWaterMl",
+            "columnName": "totalWaterMl",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "brewRatio",
+            "columnName": "brewRatio",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_brew_records_archiveId",
+            "unique": false,
+            "columnNames": [
+              "archiveId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_brew_records_archiveId` ON `${TABLE_NAME}` (`archiveId`)"
+          },
+          {
+            "name": "index_brew_records_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_brew_records_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_brew_records_brewedAt",
+            "unique": false,
+            "columnNames": [
+              "brewedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_brew_records_brewedAt` ON `${TABLE_NAME}` (`brewedAt`)"
+          },
+          {
+            "name": "index_brew_records_beanId",
+            "unique": false,
+            "columnNames": [
+              "beanId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_brew_records_beanId` ON `${TABLE_NAME}` (`beanId`)"
+          },
+          {
+            "name": "index_brew_records_grinderId",
+            "unique": false,
+            "columnNames": [
+              "grinderId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_brew_records_grinderId` ON `${TABLE_NAME}` (`grinderId`)"
+          },
+          {
+            "name": "index_brew_records_recipeTemplateId",
+            "unique": false,
+            "columnNames": [
+              "recipeTemplateId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_brew_records_recipeTemplateId` ON `${TABLE_NAME}` (`recipeTemplateId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "archives",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "archiveId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "bean_profiles",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "beanId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "grinder_profiles",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "grinderId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "subjective_evaluations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recordId` INTEGER NOT NULL, `aroma` INTEGER, `acidity` INTEGER, `sweetness` INTEGER, `bitterness` INTEGER, `body` INTEGER, `aftertaste` INTEGER, `overall` INTEGER, `notes` TEXT NOT NULL, PRIMARY KEY(`recordId`), FOREIGN KEY(`recordId`) REFERENCES `brew_records`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordId",
+            "columnName": "recordId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aroma",
+            "columnName": "aroma",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "acidity",
+            "columnName": "acidity",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sweetness",
+            "columnName": "sweetness",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "bitterness",
+            "columnName": "bitterness",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "aftertaste",
+            "columnName": "aftertaste",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "overall",
+            "columnName": "overall",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recordId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_subjective_evaluations_recordId",
+            "unique": false,
+            "columnNames": [
+              "recordId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_subjective_evaluations_recordId` ON `${TABLE_NAME}` (`recordId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "brew_records",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recordId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "flavor_tags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `archiveId` INTEGER NOT NULL, `name` TEXT NOT NULL, `isPreset` INTEGER NOT NULL, FOREIGN KEY(`archiveId`) REFERENCES `archives`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archiveId",
+            "columnName": "archiveId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPreset",
+            "columnName": "isPreset",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_flavor_tags_archiveId_name",
+            "unique": true,
+            "columnNames": [
+              "archiveId",
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_flavor_tags_archiveId_name` ON `${TABLE_NAME}` (`archiveId`, `name`)"
+          },
+          {
+            "name": "index_flavor_tags_archiveId",
+            "unique": false,
+            "columnNames": [
+              "archiveId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_flavor_tags_archiveId` ON `${TABLE_NAME}` (`archiveId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "archives",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "archiveId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "record_flavor_tags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recordId` INTEGER NOT NULL, `flavorTagId` INTEGER NOT NULL, PRIMARY KEY(`recordId`, `flavorTagId`), FOREIGN KEY(`recordId`) REFERENCES `brew_records`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`flavorTagId`) REFERENCES `flavor_tags`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordId",
+            "columnName": "recordId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "flavorTagId",
+            "columnName": "flavorTagId",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recordId",
+            "flavorTagId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_record_flavor_tags_flavorTagId",
+            "unique": false,
+            "columnNames": [
+              "flavorTagId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_record_flavor_tags_flavorTagId` ON `${TABLE_NAME}` (`flavorTagId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "brew_records",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recordId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "flavor_tags",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "flavorTagId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '45f39dcc7ea116cb3e1d2d4ad6209845')"
+    ]
+  }
+}

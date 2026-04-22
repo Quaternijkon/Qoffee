@@ -7,6 +7,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,6 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -37,12 +43,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.qoffee.core.model.BeanProcessMethod
 import com.qoffee.core.model.RoastLevel
@@ -97,38 +107,34 @@ fun SectionCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val dashboardColors = QoffeeDashboardTheme.colors
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, dashboardColors.panelStroke),
-    ) {
-        Box(
-            modifier = Modifier
-                .background(brush = qoffeePanelBrush())
-                .padding(18.dp),
-        ) {
-            Column(
-                modifier = Modifier.animateContentSize(animationSpec = spring(stiffness = 420f)),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                content = {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    if (!subtitle.isNullOrBlank()) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    content()
-                },
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                color = dashboardColors.panel.copy(alpha = 0.18f),
+                shape = MaterialTheme.shapes.large,
             )
-        }
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Column(
+            modifier = Modifier.animateContentSize(animationSpec = spring(stiffness = 420f)),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                content()
+            },
+        )
     }
 }
 
@@ -307,26 +313,50 @@ fun <T> DropdownField(
     allowClear: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { expanded = true },
-    ) {
-        OutlinedTextField(
-            value = selectedLabel.orEmpty(),
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            placeholder = { Text(placeholder) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = QoffeeDashboardTheme.colors.panelMuted,
-                focusedContainerColor = QoffeeDashboardTheme.colors.panelMuted,
-                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                unfocusedIndicatorColor = QoffeeDashboardTheme.colors.panelStroke,
-            ),
-        )
+    val shape = MaterialTheme.shapes.medium
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(modifier = modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = { expanded = true },
+                ),
+            color = QoffeeDashboardTheme.colors.panelMuted,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shape = shape,
+            border = BorderStroke(1.dp, QoffeeDashboardTheme.colors.panelStroke),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = selectedLabel ?: placeholder,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (selectedLabel == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Text(
+                    text = "▾",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
@@ -353,6 +383,16 @@ fun <T> DropdownField(
     }
 }
 
+private enum class RatingGlyph {
+    AROMA,
+    ACIDITY,
+    SWEETNESS,
+    BITTERNESS,
+    BODY,
+    AFTERTASTE,
+    OVERALL,
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RatingSelector(
@@ -362,6 +402,15 @@ fun RatingSelector(
     onSelected: (Int?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val glyph = when (label) {
+        "香气" -> RatingGlyph.AROMA
+        "酸质" -> RatingGlyph.ACIDITY
+        "甜感" -> RatingGlyph.SWEETNESS
+        "苦感" -> RatingGlyph.BITTERNESS
+        "醇厚" -> RatingGlyph.BODY
+        "余韵" -> RatingGlyph.AFTERTASTE
+        else -> RatingGlyph.OVERALL
+    }
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -382,25 +431,189 @@ fun RatingSelector(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilterChip(
-                selected = value == null,
-                onClick = { onSelected(null) },
-                label = { Text("清空") },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = QoffeeDashboardTheme.colors.panelMuted,
-                    selectedContainerColor = QoffeeDashboardTheme.colors.accentSoft,
-                ),
-            )
             range.forEach { score ->
-                FilterChip(
-                    selected = value == score,
-                    onClick = { onSelected(score) },
-                    label = { Text(score.toString()) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = QoffeeDashboardTheme.colors.panelMuted,
-                        selectedContainerColor = QoffeeDashboardTheme.colors.accentSoft,
+                val selected = value != null && score <= value
+                val interactionSource = remember(score, value) { MutableInteractionSource() }
+                val pressed by interactionSource.collectIsPressedAsState()
+                Surface(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .graphicsLayer {
+                            scaleX = if (pressed) 0.92f else 1f
+                            scaleY = if (pressed) 0.92f else 1f
+                        }
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = { onSelected(if (value == score) null else score) },
+                        ),
+                    color = if (selected) {
+                        QoffeeDashboardTheme.colors.accentSoft
+                    } else {
+                        QoffeeDashboardTheme.colors.panelMuted
+                    },
+                    contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    shape = CircleShape,
+                    border = BorderStroke(
+                        1.dp,
+                        if (selected) QoffeeDashboardTheme.colors.panelStrokeStrong else QoffeeDashboardTheme.colors.panelStroke,
                     ),
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        RatingGlyphIcon(
+                            glyph = glyph,
+                            selected = selected,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MovieRatingSelector(
+    label: String,
+    value: Int?,
+    range: IntRange,
+    onSelected: (Int?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = label, style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = value?.let { "$it / 5" } ?: "未评分",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Row(
+            modifier = Modifier.selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            range.forEach { score ->
+                val selected = value != null && score <= value
+                val interactionSource = remember(score, value) { MutableInteractionSource() }
+                val pressed by interactionSource.collectIsPressedAsState()
+                Icon(
+                    imageVector = if (selected) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = "$label $score",
+                    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .graphicsLayer {
+                            scaleX = if (pressed) 0.92f else 1f
+                            scaleY = if (pressed) 0.92f else 1f
+                        }
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = { onSelected(if (value == score) null else score) },
+                        ),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RatingGlyphIcon(
+    glyph: RatingGlyph,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Canvas(modifier = modifier) {
+        when (glyph) {
+            RatingGlyph.AROMA -> {
+                val x1 = size.width * 0.28f
+                val x2 = size.width * 0.5f
+                val x3 = size.width * 0.72f
+                drawLine(tint, Offset(x1, size.height * 0.82f), Offset(x1, size.height * 0.24f), strokeWidth = 1.5.dp.toPx())
+                drawLine(tint, Offset(x2, size.height * 0.82f), Offset(x2, size.height * 0.18f), strokeWidth = 1.5.dp.toPx())
+                drawLine(tint, Offset(x3, size.height * 0.82f), Offset(x3, size.height * 0.3f), strokeWidth = 1.5.dp.toPx())
+            }
+            RatingGlyph.ACIDITY -> {
+                val path = Path().apply {
+                    moveTo(size.width / 2f, size.height * 0.1f)
+                    quadraticTo(size.width * 0.82f, size.height * 0.42f, size.width * 0.64f, size.height * 0.78f)
+                    quadraticTo(size.width / 2f, size.height * 0.96f, size.width * 0.36f, size.height * 0.78f)
+                    quadraticTo(size.width * 0.18f, size.height * 0.42f, size.width / 2f, size.height * 0.1f)
+                    close()
+                }
+                drawPath(path, tint)
+            }
+            RatingGlyph.SWEETNESS -> {
+                drawLine(tint, Offset(size.width * 0.5f, size.height * 0.08f), Offset(size.width * 0.5f, size.height * 0.92f), strokeWidth = 1.6.dp.toPx())
+                drawLine(tint, Offset(size.width * 0.08f, size.height * 0.5f), Offset(size.width * 0.92f, size.height * 0.5f), strokeWidth = 1.6.dp.toPx())
+                drawLine(tint, Offset(size.width * 0.2f, size.height * 0.2f), Offset(size.width * 0.8f, size.height * 0.8f), strokeWidth = 1.4.dp.toPx())
+                drawLine(tint, Offset(size.width * 0.8f, size.height * 0.2f), Offset(size.width * 0.2f, size.height * 0.8f), strokeWidth = 1.4.dp.toPx())
+            }
+            RatingGlyph.BITTERNESS -> {
+                val path = Path().apply {
+                    moveTo(size.width * 0.62f, size.height * 0.06f)
+                    lineTo(size.width * 0.28f, size.height * 0.54f)
+                    lineTo(size.width * 0.5f, size.height * 0.54f)
+                    lineTo(size.width * 0.38f, size.height * 0.94f)
+                    lineTo(size.width * 0.72f, size.height * 0.42f)
+                    lineTo(size.width * 0.5f, size.height * 0.42f)
+                    close()
+                }
+                drawPath(path, tint)
+            }
+            RatingGlyph.BODY -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.18f, size.height * 0.22f),
+                    size = Size(size.width * 0.64f, size.height * 0.56f),
+                    cornerRadius = CornerRadius(size.width * 0.18f, size.width * 0.18f),
+                )
+            }
+            RatingGlyph.AFTERTASTE -> {
+                drawOval(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.12f, size.height * 0.36f),
+                    size = Size(size.width * 0.34f, size.height * 0.34f),
+                )
+                drawArc(
+                    color = tint,
+                    startAngle = -40f,
+                    sweepAngle = 240f,
+                    useCenter = false,
+                    topLeft = Offset(size.width * 0.28f, size.height * 0.18f),
+                    size = Size(size.width * 0.58f, size.height * 0.58f),
+                    style = Stroke(width = 1.7.dp.toPx()),
+                )
+            }
+            RatingGlyph.OVERALL -> {
+                val path = Path().apply {
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    val outer = size.width * 0.42f
+                    val inner = outer * 0.45f
+                    for (index in 0 until 10) {
+                        val angle = Math.toRadians((-90.0 + index * 36.0))
+                        val radius = if (index % 2 == 0) outer else inner
+                        val x = cx + (Math.cos(angle) * radius).toFloat()
+                        val y = cy + (Math.sin(angle) * radius).toFloat()
+                        if (index == 0) moveTo(x, y) else lineTo(x, y)
+                    }
+                    close()
+                }
+                drawPath(path, tint)
             }
         }
     }

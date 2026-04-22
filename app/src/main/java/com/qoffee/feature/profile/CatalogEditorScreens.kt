@@ -2,6 +2,8 @@ package com.qoffee.feature.profile
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +36,7 @@ import com.qoffee.core.model.RoastLevel
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.ui.components.DashboardActionBar
 import com.qoffee.ui.components.DropdownOption
+import com.qoffee.ui.components.DatePickerField
 import com.qoffee.ui.components.EmptyStateCard
 import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.RoastLevelSelector
@@ -41,16 +44,16 @@ import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.SingleChoiceChipGroup
 import com.qoffee.ui.navigation.QoffeeDestinations
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.time.LocalDate
-import java.time.format.DateTimeParseException
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class BeanEditorUiState(
     val isLoading: Boolean = true,
     val bean: BeanProfile? = null,
+    val nameSuggestions: List<String> = emptyList(),
 )
 
 data class GrinderEditorUiState(
@@ -69,9 +72,14 @@ class BeanEditorViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            val suggestions = catalogRepository.observeBeanProfiles()
+                .first()
+                .mapNotNull { it.name.trim().takeIf(String::isNotBlank) }
+                .distinct()
             uiStateInternal.value = BeanEditorUiState(
                 isLoading = false,
                 bean = beanId.takeIf { it > 0L }?.let { catalogRepository.getBeanProfile(it) },
+                nameSuggestions = suggestions,
             )
         }
     }
@@ -98,6 +106,8 @@ class GrinderEditorViewModel @Inject constructor(
     }
 
     suspend fun save(profile: GrinderProfile): Long = catalogRepository.saveGrinderProfile(profile)
+
+    suspend fun delete(grinderId: Long) = catalogRepository.deleteGrinderProfile(grinderId)
 }
 
 @Composable
@@ -139,9 +149,16 @@ fun GrinderEditorRoute(
                 onSaved()
             }
         },
+        onDelete = { grinderId ->
+            viewModel.viewModelScope.launch {
+                viewModel.delete(grinderId)
+                onSaved()
+            }
+        },
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BeanEditorScreen(
     paddingValues: PaddingValues,
@@ -165,11 +182,18 @@ private fun BeanEditorScreen(
     var processMethod by remember(initialValue) { mutableStateOf(initialValue?.processMethod ?: BeanProcessMethod.WASHED) }
     var variety by remember(initialValue) { mutableStateOf(initialValue?.variety.orEmpty()) }
     var roastLevel by remember(initialValue) { mutableStateOf(initialValue?.roastLevel ?: RoastLevel.MEDIUM) }
-    var roastDate by remember(initialValue) {
-        mutableStateOf(initialValue?.roastDateEpochDay?.let(LocalDate::ofEpochDay)?.toString().orEmpty())
-    }
+    var roastDateEpochDay by remember(initialValue) { mutableStateOf(initialValue?.roastDateEpochDay) }
+    var initialStock by remember(initialValue) { mutableStateOf(initialValue?.initialStockG?.toString().orEmpty()) }
     var notes by remember(initialValue) { mutableStateOf(initialValue?.notes.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
+    val matchingSuggestions = remember(name, uiState.nameSuggestions) {
+        uiState.nameSuggestions
+            .filter { suggestion ->
+                suggestion != name.trim() &&
+                    (name.isBlank() || suggestion.contains(name.trim(), ignoreCase = true))
+            }
+            .take(5)
+    }
 
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -184,14 +208,13 @@ private fun BeanEditorScreen(
                 }
                 Button(
                     onClick = {
-                        val parsedDate = try {
-                            roastDate.takeIf { it.isNotBlank() }?.let(LocalDate::parse)?.toEpochDay()
-                        } catch (_: DateTimeParseException) {
-                            error = "烘焙日期请使用 YYYY-MM-DD 格式。"
-                            return@Button
-                        }
                         if (name.isBlank()) {
                             error = "名称不能为空。"
+                            return@Button
+                        }
+                        val parsedInitialStock = initialStock.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+                        if (initialStock.isNotBlank() && parsedInitialStock == null) {
+                            error = "库存克重请输入有效数字。"
                             return@Button
                         }
                         error = null
@@ -205,7 +228,8 @@ private fun BeanEditorScreen(
                                 processMethod = processMethod,
                                 variety = variety.trim(),
                                 roastLevel = roastLevel,
-                                roastDateEpochDay = parsedDate,
+                                roastDateEpochDay = roastDateEpochDay,
+                                initialStockG = parsedInitialStock,
                                 notes = notes.trim(),
                                 createdAt = initialValue?.createdAt ?: 0L,
                             ),
@@ -254,10 +278,10 @@ private fun BeanEditorScreen(
                     selected = roastLevel,
                     onSelected = { roastLevel = it },
                 )
-                OutlinedTextField(
-                    value = roastDate,
-                    onValueChange = { roastDate = it },
-                    label = { Text("烘焙日期（YYYY-MM-DD）") },
+                DatePickerField(
+                    label = "烘焙日期",
+                    valueEpochDay = roastDateEpochDay,
+                    onValueChange = { roastDateEpochDay = it },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth())
@@ -272,6 +296,7 @@ private fun GrinderEditorScreen(
     uiState: GrinderEditorUiState,
     onBack: () -> Unit,
     onSave: (GrinderProfile) -> Unit,
+    onDelete: (Long) -> Unit,
 ) {
     if (uiState.isLoading) {
         EmptyStateCard(
@@ -290,6 +315,7 @@ private fun GrinderEditorScreen(
     var unitLabel by remember(initialValue) { mutableStateOf(initialValue?.unitLabel.orEmpty()) }
     var notes by remember(initialValue) { mutableStateOf(initialValue?.notes.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -338,6 +364,14 @@ private fun GrinderEditorScreen(
                 ) {
                     Text("保存")
                 }
+                initialValue?.let {
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Delete Grinder")
+                    }
+                }
             }
         },
     ) { innerPadding ->
@@ -371,5 +405,28 @@ private fun GrinderEditorScreen(
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth())
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Grinder") },
+            text = { Text("This grinder will be removed from the current archive.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirm = false
+                        initialValue?.let { onDelete(it.id) }
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }

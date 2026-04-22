@@ -12,9 +12,9 @@ class RecordPresentationTest {
     @Test
     fun findPreviousComparableRecordReturnsLatestOlderMatch() {
         val records = listOf(
-            record(id = 1L, brewedAt = 1_000L, overall = 7, waterTemp = 90.0),
-            record(id = 2L, brewedAt = 2_000L, overall = 8, waterTemp = 91.0),
-            record(id = 3L, brewedAt = 3_000L, overall = 9, waterTemp = 92.0),
+            record(id = 1L, brewedAt = 1_000L, overall = 3, waterTemp = 90.0),
+            record(id = 2L, brewedAt = 2_000L, overall = 4, waterTemp = 91.0),
+            record(id = 3L, brewedAt = 3_000L, overall = 5, waterTemp = 92.0),
         )
 
         val previous = findPreviousComparableRecord(records, records.last())
@@ -25,8 +25,8 @@ class RecordPresentationTest {
     @Test
     fun buildComparisonSummaryMapTracksDeltaAgainstPreviousCup() {
         val records = listOf(
-            record(id = 1L, brewedAt = 1_000L, overall = 7, waterTemp = 90.0),
-            record(id = 2L, brewedAt = 2_000L, overall = 9, waterTemp = 92.0),
+            record(id = 1L, brewedAt = 1_000L, overall = 3, waterTemp = 90.0),
+            record(id = 2L, brewedAt = 2_000L, overall = 5, waterTemp = 92.0),
         )
 
         val comparisonMap = buildComparisonSummaryMap(records)
@@ -40,14 +40,14 @@ class RecordPresentationTest {
     fun buildBeanHistorySummaryUsesCompletedScoredRecordsOnly() {
         val summary = buildBeanHistorySummary(
             records = listOf(
-                record(id = 1L, brewedAt = 1_000L, overall = 7, waterTemp = 90.0),
-                record(id = 2L, brewedAt = 2_000L, overall = 9, waterTemp = 92.0),
+                record(id = 1L, brewedAt = 1_000L, overall = 3, waterTemp = 90.0),
+                record(id = 2L, brewedAt = 2_000L, overall = 5, waterTemp = 92.0),
             ),
             beanId = 10L,
         )
 
         assertThat(summary).contains("同豆已记录 2 杯")
-        assertThat(summary).contains("平均总分 8.0")
+        assertThat(summary).contains("平均总分 4.0")
     }
 
     private fun record(

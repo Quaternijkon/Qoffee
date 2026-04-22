@@ -20,16 +20,28 @@ import com.qoffee.data.local.RecordFlavorTagDao
 import com.qoffee.data.local.SubjectiveEvaluationDao
 import com.qoffee.data.repository.ArchiveRepositoryImpl
 import com.qoffee.data.repository.AnalyticsRepositoryImpl
+import com.qoffee.data.repository.BackupRepositoryImpl
 import com.qoffee.data.repository.CatalogRepositoryImpl
 import com.qoffee.data.repository.PreferenceRepositoryImpl
 import com.qoffee.data.repository.RecipeRepositoryImpl
 import com.qoffee.data.repository.RecordRepositoryImpl
+import com.qoffee.data.repository.SessionRepositoryImpl
+import com.qoffee.data.repository.LearningRepositoryImpl
+import com.qoffee.data.repository.ExperimentRepositoryFacade
+import com.qoffee.data.repository.EntitlementRepositoryImpl
+import com.qoffee.data.repository.ShareRepositoryImpl
 import com.qoffee.domain.repository.ArchiveRepository
 import com.qoffee.domain.repository.AnalyticsRepository
+import com.qoffee.domain.repository.BackupRepository
 import com.qoffee.domain.repository.CatalogRepository
+import com.qoffee.domain.repository.EntitlementRepository
+import com.qoffee.domain.repository.ExperimentRepository
+import com.qoffee.domain.repository.LearningRepository
 import com.qoffee.domain.repository.PreferenceRepository
 import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.domain.repository.SessionRepository
+import com.qoffee.domain.repository.ShareRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -49,7 +61,13 @@ object DatabaseModule {
             context,
             QoffeeDatabase::class.java,
             "qoffee.db",
-        ).addMigrations(QoffeeDatabaseMigrations.MIGRATION_2_3)
+        ).addMigrations(
+            QoffeeDatabaseMigrations.MIGRATION_2_3,
+            QoffeeDatabaseMigrations.MIGRATION_3_4,
+            QoffeeDatabaseMigrations.MIGRATION_4_5,
+            QoffeeDatabaseMigrations.MIGRATION_5_6,
+            QoffeeDatabaseMigrations.MIGRATION_6_7,
+        )
             .fallbackToDestructiveMigration(false)
             .build()
     }
@@ -123,4 +141,28 @@ abstract class BindingsModule {
     @Binds
     @Singleton
     abstract fun bindPreferenceRepository(impl: PreferenceRepositoryImpl): PreferenceRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSessionRepository(impl: SessionRepositoryImpl): SessionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLearningRepository(impl: LearningRepositoryImpl): LearningRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindExperimentRepository(impl: ExperimentRepositoryFacade): ExperimentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindEntitlementRepository(impl: EntitlementRepositoryImpl): EntitlementRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindShareRepository(impl: ShareRepositoryImpl): ShareRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindBackupRepository(impl: BackupRepositoryImpl): BackupRepository
 }

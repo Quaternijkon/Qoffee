@@ -1,5 +1,7 @@
 package com.qoffee.core.model
 
+import java.util.Locale
+
 enum class ArchiveType(
     val code: String,
     val displayName: String,
@@ -114,6 +116,7 @@ enum class NumericParameter(
     val displayName: String,
     val unitLabel: String,
 ) {
+    BREW_TIME("Brew Time", "s"),
     WATER_TEMP("水温", "°C"),
     BREW_RATIO("粉水比", ""),
     TOTAL_WATER("总水量", "ml"),
@@ -132,6 +135,7 @@ data class AnalysisFilter(
     val timeRange: AnalysisTimeRange = AnalysisTimeRange.LAST_90_DAYS,
     val brewMethod: BrewMethod? = null,
     val beanId: Long? = null,
+    val beanNameKey: String? = null,
     val roastLevel: RoastLevel? = null,
     val processMethod: BeanProcessMethod? = null,
     val grinderId: Long? = null,
@@ -145,6 +149,7 @@ data class AnalysisFilter(
             (archiveId == null || record.archiveId == archiveId) &&
             (brewMethod == null || record.brewMethod == brewMethod) &&
             (beanId == null || record.beanProfileId == beanId) &&
+            (beanNameKey == null || normalizedBeanNameKey(record.beanNameSnapshot) == beanNameKey) &&
             (roastLevel == null || record.beanRoastLevelSnapshot == roastLevel) &&
             (processMethod == null || record.beanProcessMethodSnapshot == processMethod) &&
             (grinderId == null || record.grinderProfileId == grinderId)
@@ -161,6 +166,7 @@ data class BeanProfile(
     val variety: String = "",
     val roastLevel: RoastLevel,
     val roastDateEpochDay: Long? = null,
+    val initialStockG: Double? = null,
     val notes: String = "",
     val createdAt: Long = 0L,
 )
@@ -191,6 +197,7 @@ data class RecipeTemplate(
     val brewWaterMl: Double? = null,
     val bypassWaterMl: Double? = null,
     val waterTempC: Double? = null,
+    val waterCurve: WaterCurve? = null,
     val notes: String = "",
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
@@ -246,8 +253,10 @@ data class CoffeeRecord(
     val brewWaterMl: Double? = null,
     val bypassWaterMl: Double? = null,
     val waterTempC: Double? = null,
+    val waterCurve: WaterCurve? = null,
     val notes: String = "",
     val brewedAt: Long = 0L,
+    val brewDurationSeconds: Int? = null,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
     val totalWaterMl: Double? = null,
@@ -270,8 +279,55 @@ data class ObjectiveDraftUpdate(
     val brewWaterMl: Double? = null,
     val bypassWaterMl: Double? = null,
     val waterTempC: Double? = null,
+    val waterCurve: WaterCurve? = null,
+    val brewedAt: Long? = null,
+    val brewDurationSeconds: Int? = null,
     val notes: String = "",
 )
+
+sealed interface RecordPrefillSource {
+    data object Blank : RecordPrefillSource
+    data object Draft : RecordPrefillSource
+    data class Recipe(val recipeId: Long) : RecordPrefillSource
+    data class Record(val recordId: Long) : RecordPrefillSource
+    data class Bean(val beanId: Long) : RecordPrefillSource
+}
+
+enum class DraftReplacePolicy {
+    KEEP_CURRENT,
+    REPLACE_CURRENT,
+}
+
+enum class RecordDraftLaunchBehavior {
+    CREATE_NEW,
+    CONTINUE_CURRENT,
+    CONFIRM_REPLACE,
+}
+
+fun resolveRecordDraftLaunchBehavior(
+    activeDraft: CoffeeRecord?,
+    prefillSource: RecordPrefillSource,
+): RecordDraftLaunchBehavior {
+    if (activeDraft == null) {
+        return RecordDraftLaunchBehavior.CREATE_NEW
+    }
+    return when (prefillSource) {
+        RecordPrefillSource.Blank,
+        is RecordPrefillSource.Recipe,
+        is RecordPrefillSource.Record,
+        -> RecordDraftLaunchBehavior.CONFIRM_REPLACE
+
+        RecordPrefillSource.Draft -> RecordDraftLaunchBehavior.CONTINUE_CURRENT
+
+        is RecordPrefillSource.Bean -> {
+            if (activeDraft.beanProfileId == prefillSource.beanId) {
+                RecordDraftLaunchBehavior.CONTINUE_CURRENT
+            } else {
+                RecordDraftLaunchBehavior.CONFIRM_REPLACE
+            }
+        }
+    }
+}
 
 data class MethodAverage(
     val brewMethod: BrewMethod,
@@ -338,6 +394,26 @@ data class SuggestedNextStep(
     val message: String,
 )
 
+data class ParameterCorrelation(
+    val parameter: NumericParameter,
+    val coefficient: Double,
+    val sampleCount: Int,
+    val confidence: InsightConfidence,
+)
+
+enum class RecordHighlightKind(val displayName: String) {
+    BEST_SCORE("高分样本"),
+    LOW_SCORE("低分样本"),
+    RECENT("最近样本"),
+}
+
+data class RecordHighlight(
+    val recordId: Long,
+    val title: String,
+    val subtitle: String,
+    val kind: RecordHighlightKind,
+)
+
 data class InsightCard(
     val title: String,
     val message: String,
@@ -351,11 +427,14 @@ data class AnalyticsDashboard(
     val filter: AnalysisFilter,
     val summary: AnalyticsSummary = AnalyticsSummary(),
     val sampleCount: Int = 0,
+    val scoreRange: IntRange = 1..5,
     val insightCards: List<InsightCard> = emptyList(),
     val methodAverages: List<MethodAverage> = emptyList(),
     val timelinePoints: List<TimelinePoint> = emptyList(),
     val scatterSeries: Map<NumericParameter, List<ScatterPoint>> = emptyMap(),
     val dimensionAverages: List<SubjectiveDimensionAverage> = emptyList(),
+    val parameterCorrelations: List<ParameterCorrelation> = emptyList(),
+    val highlightRecords: List<RecordHighlight> = emptyList(),
     val rangeInsights: List<RangeInsight> = emptyList(),
     val methodComparisonInsights: List<MethodComparisonInsight> = emptyList(),
     val beanComparisonInsights: List<BeanComparisonInsight> = emptyList(),
@@ -369,6 +448,209 @@ data class UserSettings(
     val autoRestoreDraft: Boolean = true,
     val showInsightConfidence: Boolean = true,
     val defaultAnalysisTimeRange: AnalysisTimeRange = AnalysisTimeRange.LAST_90_DAYS,
+    val defaultBeanProfileId: Long? = null,
+    val defaultGrinderProfileId: Long? = null,
+    val showLearnInDock: Boolean = false,
+)
+
+data class FileExportPayload(
+    val fileName: String,
+    val mimeType: String,
+    val content: String,
+)
+
+enum class RestoreStatus {
+    SUCCESS,
+    VALIDATION_ERROR,
+    SYSTEM_ERROR,
+}
+
+data class RestoreOutcome(
+    val importedArchiveCount: Int = 0,
+    val importedArchiveNames: List<String> = emptyList(),
+    val switchedArchiveId: Long? = null,
+    val message: String = "",
+    val status: RestoreStatus = RestoreStatus.SUCCESS,
+)
+
+enum class SkillLevel(val displayName: String) {
+    BEGINNER("入门"),
+    INTERMEDIATE("进阶"),
+    ADVANCED("高阶"),
+}
+
+enum class LessonType(val displayName: String) {
+    FOUNDATIONS("基础"),
+    METHOD("方法"),
+    DEVICE("设备"),
+    TROUBLESHOOTING("故障排查"),
+    SENSORY("感官训练"),
+}
+
+enum class ExperimentStatus(val displayName: String) {
+    PLANNED("计划中"),
+    ACTIVE("进行中"),
+    REVIEW("复盘中"),
+}
+
+enum class EntitlementTier(val displayName: String) {
+    FREE("Free"),
+    PRO("Pro"),
+}
+
+data class BrewStage(
+    val id: String,
+    val title: String,
+    val instruction: String,
+    val targetDurationSeconds: Int,
+    val targetValueLabel: String = "",
+    val tip: String = "",
+)
+
+data class BrewSession(
+    val id: String,
+    val method: BrewMethod,
+    val title: String,
+    val practiceBlockId: String? = null,
+    val startedAt: Long,
+    val currentStageIndex: Int = 0,
+    val stages: List<BrewStage> = emptyList(),
+    val isCompleted: Boolean = false,
+    val completedAt: Long? = null,
+) {
+    val currentStage: BrewStage? get() = stages.getOrNull(currentStageIndex)
+    val progressFraction: Float
+        get() = if (stages.isEmpty()) 0f else (currentStageIndex + 1).coerceAtMost(stages.size) / stages.size.toFloat()
+}
+
+data class PracticeBlock(
+    val id: String,
+    val title: String,
+    val description: String,
+    val method: BrewMethod? = null,
+    val focus: String,
+    val sessionTarget: Int,
+    val level: SkillLevel,
+    val proOnly: Boolean = false,
+)
+
+data class RecipeVersion(
+    val id: String,
+    val baseRecipeId: Long? = null,
+    val name: String,
+    val summary: String,
+    val brewMethod: BrewMethod? = null,
+    val sourceRecordId: Long? = null,
+    val versionNumber: Int = 1,
+    val proOnly: Boolean = false,
+)
+
+data class Experiment(
+    val id: String,
+    val title: String,
+    val hypothesis: String,
+    val brewMethod: BrewMethod? = null,
+    val comparedParameter: NumericParameter? = null,
+    val status: ExperimentStatus = ExperimentStatus.PLANNED,
+    val practiceBlockId: String? = null,
+)
+
+data class ExperimentRun(
+    val id: String,
+    val experimentId: String,
+    val label: String,
+    val recordId: Long? = null,
+    val notes: String = "",
+    val score: Int? = null,
+    val deltaSummary: String? = null,
+)
+
+data class LearningTrack(
+    val id: String,
+    val title: String,
+    val summary: String,
+    val level: SkillLevel,
+    val lessonCount: Int,
+    val estimatedMinutes: Int,
+    val proOnly: Boolean = false,
+)
+
+data class Lesson(
+    val id: String,
+    val trackId: String,
+    val title: String,
+    val summary: String,
+    val level: SkillLevel,
+    val type: LessonType,
+    val estimatedMinutes: Int,
+    val keyPoints: List<String> = emptyList(),
+    val steps: List<String> = emptyList(),
+    val glossaryTerms: List<String> = emptyList(),
+    val proOnly: Boolean = false,
+)
+
+data class GlossaryTerm(
+    val id: String,
+    val term: String,
+    val shortDefinition: String,
+    val explanation: String,
+    val relatedTerms: List<String> = emptyList(),
+)
+
+data class TroubleshootingItem(
+    val id: String,
+    val symptom: String,
+    val likelyCauses: List<String>,
+    val adjustments: List<String>,
+    val relatedLessonId: String? = null,
+)
+
+data class BeanInventory(
+    val beanId: Long? = null,
+    val beanName: String,
+    val roastDateEpochDay: Long? = null,
+    val roastAgeLabel: String = "",
+    val initialStockG: Double = 0.0,
+    val usedStockG: Double = 0.0,
+    val remainingStockG: Double = 0.0,
+    val remainingRatio: Float = 0f,
+    val remainingPercentage: Int = 0,
+    val id: String = "",
+    val batchLabel: String = "",
+    val purchasedAt: Long? = null,
+    val openedAt: Long? = null,
+    val gramsRemaining: Int? = null,
+    val costAmount: Double? = null,
+    val currencyCode: String = "CNY",
+    val recommendedWindow: String = "",
+    val averageWeeklyUsageG: Double? = null,
+)
+
+fun normalizedBeanNameKey(name: String?): String? {
+    val normalized = name
+        ?.trim()
+        ?.replace(Regex("\\s+"), " ")
+        ?.lowercase(Locale.ROOT)
+        ?.takeIf { it.isNotBlank() }
+    return normalized
+}
+
+fun legacyTenPointScoreToFivePoint(score: Int): Int {
+    return ((score + 1) / 2).coerceIn(1, 5)
+}
+
+data class ShareCard(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val body: String,
+    val badge: String? = null,
+)
+
+data class UserEntitlements(
+    val tier: EntitlementTier = EntitlementTier.FREE,
+    val unlockedFeatures: List<String> = emptyList(),
+    val proHighlights: List<String> = emptyList(),
 )
 
 data class RecordValidationResult(
