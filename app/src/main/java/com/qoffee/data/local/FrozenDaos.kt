@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ArchiveCoreDao {
@@ -172,12 +173,54 @@ interface UnitDefinitionDao {
 interface CollectionDao {
     @Upsert
     suspend fun upsert(entity: CollectionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: CollectionEntity): Long
+
+    @Query("SELECT * FROM collection WHERE archiveId = :archiveId AND typeCode = :typeCode ORDER BY updatedAt DESC, createdAt DESC")
+    fun observeByArchiveAndType(archiveId: Long, typeCode: String): Flow<List<CollectionEntity>>
+
+    @Query("SELECT * FROM collection WHERE id = :id")
+    fun observeById(id: Long): Flow<CollectionEntity?>
+
+    @Query("SELECT * FROM collection WHERE id = :id")
+    suspend fun getById(id: Long): CollectionEntity?
+
+    @Query("SELECT * FROM collection WHERE archiveId = :archiveId AND typeCode = :typeCode AND title = :title LIMIT 1")
+    suspend fun findByArchiveTypeAndTitle(archiveId: Long, typeCode: String, title: String): CollectionEntity?
+
+    @Query("DELETE FROM collection WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 @Dao
 interface CollectionItemLinkDao {
+    @Upsert
+    suspend fun upsert(entity: CollectionItemLinkEntity)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(entities: List<CollectionItemLinkEntity>)
+
+    @Query("SELECT * FROM collection_item_link WHERE collectionId = :collectionId ORDER BY sortOrder ASC, id ASC")
+    fun observeForCollection(collectionId: Long): Flow<List<CollectionItemLinkEntity>>
+
+    @Query("SELECT * FROM collection_item_link WHERE archiveId = :archiveId ORDER BY sortOrder ASC, id ASC")
+    fun observeByArchive(archiveId: Long): Flow<List<CollectionItemLinkEntity>>
+
+    @Query("SELECT * FROM collection_item_link WHERE collectionId = :collectionId ORDER BY sortOrder ASC, id ASC")
+    suspend fun getForCollection(collectionId: Long): List<CollectionItemLinkEntity>
+
+    @Query("SELECT * FROM collection_item_link WHERE collectionId = :collectionId AND itemType = :itemType ORDER BY sortOrder ASC, id ASC")
+    suspend fun getForCollectionItemType(collectionId: Long, itemType: String): List<CollectionItemLinkEntity>
+
+    @Query("SELECT * FROM collection_item_link WHERE collectionId = :collectionId AND itemType = :itemType AND itemId = :itemId LIMIT 1")
+    suspend fun findByCollectionAndItem(collectionId: Long, itemType: String, itemId: Long): CollectionItemLinkEntity?
+
+    @Query("DELETE FROM collection_item_link WHERE collectionId = :collectionId")
+    suspend fun deleteForCollection(collectionId: Long)
+
+    @Query("DELETE FROM collection_item_link WHERE collectionId = :collectionId AND itemType = :itemType")
+    suspend fun deleteForCollectionItemType(collectionId: Long, itemType: String)
 }
 
 @Dao

@@ -31,6 +31,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.qoffee.core.model.BeanProcessMethod
 import com.qoffee.core.model.BeanProfile
+import com.qoffee.core.model.GrindCalibrationRange
+import com.qoffee.core.model.GrindNormalizationProfile
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.RoastLevel
 import com.qoffee.domain.repository.CatalogRepository
@@ -38,6 +40,7 @@ import com.qoffee.ui.components.DashboardActionBar
 import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.DatePickerField
 import com.qoffee.ui.components.EmptyStateCard
+import com.qoffee.ui.components.GrindNormalizationChart
 import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.RoastLevelSelector
 import com.qoffee.ui.components.SectionCard
@@ -313,9 +316,55 @@ private fun GrinderEditorScreen(
     var maxSetting by remember(initialValue) { mutableStateOf(initialValue?.maxSetting?.toString().orEmpty()) }
     var stepSize by remember(initialValue) { mutableStateOf(initialValue?.stepSize?.toString().orEmpty()) }
     var unitLabel by remember(initialValue) { mutableStateOf(initialValue?.unitLabel.orEmpty()) }
+    var espressoStart by remember(initialValue) { mutableStateOf(initialValue?.normalization?.espressoRange?.start?.toString().orEmpty()) }
+    var espressoEnd by remember(initialValue) { mutableStateOf(initialValue?.normalization?.espressoRange?.end?.toString().orEmpty()) }
+    var mokaStart by remember(initialValue) { mutableStateOf(initialValue?.normalization?.mokaRange?.start?.toString().orEmpty()) }
+    var mokaEnd by remember(initialValue) { mutableStateOf(initialValue?.normalization?.mokaRange?.end?.toString().orEmpty()) }
+    var pourStart by remember(initialValue) { mutableStateOf(initialValue?.normalization?.pourOverRange?.start?.toString().orEmpty()) }
+    var pourEnd by remember(initialValue) { mutableStateOf(initialValue?.normalization?.pourOverRange?.end?.toString().orEmpty()) }
+    var coldBrewPoint by remember(initialValue) { mutableStateOf(initialValue?.normalization?.coldBrewPoint?.toString().orEmpty()) }
     var notes by remember(initialValue) { mutableStateOf(initialValue?.notes.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val minValue = minSetting.toDoubleOrNull()
+    val maxValue = maxSetting.toDoubleOrNull()
+    val normalizationCandidate = runCatching {
+        if (
+            espressoStart.isBlank() &&
+            espressoEnd.isBlank() &&
+            mokaStart.isBlank() &&
+            mokaEnd.isBlank() &&
+            pourStart.isBlank() &&
+            pourEnd.isBlank() &&
+            coldBrewPoint.isBlank()
+        ) {
+            null
+        } else {
+            GrindNormalizationProfile(
+                espressoRange = GrindCalibrationRange(
+                    start = espressoStart.toDouble(),
+                    end = espressoEnd.toDouble(),
+                ),
+                mokaRange = GrindCalibrationRange(
+                    start = mokaStart.toDouble(),
+                    end = mokaEnd.toDouble(),
+                ),
+                pourOverRange = GrindCalibrationRange(
+                    start = pourStart.toDouble(),
+                    end = pourEnd.toDouble(),
+                ),
+                coldBrewPoint = coldBrewPoint.toDouble(),
+            )
+        }
+    }.getOrNull()
+    val normalizationErrors = normalizationCandidate?.validationErrors(
+        minSetting = minValue,
+        maxSetting = maxValue,
+    ).orEmpty()
+    val normalizationCurve = normalizationCandidate?.buildCurve(
+        minSetting = minValue ?: 0.0,
+        maxSetting = maxValue ?: 0.0,
+    )
 
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -345,6 +394,10 @@ private fun GrinderEditorScreen(
                             error = "最大格数必须大于最小格数。"
                             return@Button
                         }
+                        if (normalizationCandidate != null && normalizationErrors.isNotEmpty()) {
+                            error = normalizationErrors.joinToString(" ")
+                            return@Button
+                        }
                         error = null
                         onSave(
                             GrinderProfile(
@@ -355,6 +408,7 @@ private fun GrinderEditorScreen(
                                 maxSetting = max,
                                 stepSize = step,
                                 unitLabel = unitLabel.ifBlank { "格" },
+                                normalization = normalizationCandidate,
                                 notes = notes.trim(),
                                 createdAt = initialValue?.createdAt ?: 0L,
                             ),
@@ -403,6 +457,34 @@ private fun GrinderEditorScreen(
                 OutlinedTextField(value = stepSize, onValueChange = { stepSize = it }, label = { Text("步进") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = unitLabel, onValueChange = { unitLabel = it }, label = { Text("单位标签") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth())
+            }
+            SectionCard(
+                title = "归一化标定",
+                subtitle = "输入商家建议的刻度区间，Qoffee 会把原始格数拟合到统一的 0~1 坐标系。",
+            ) {
+                OutlinedTextField(value = espressoStart, onValueChange = { espressoStart = it }, label = { Text("意式起点") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = espressoEnd, onValueChange = { espressoEnd = it }, label = { Text("意式终点") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = mokaStart, onValueChange = { mokaStart = it }, label = { Text("摩卡壶起点") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = mokaEnd, onValueChange = { mokaEnd = it }, label = { Text("摩卡壶终点") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = pourStart, onValueChange = { pourStart = it }, label = { Text("手冲起点") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = pourEnd, onValueChange = { pourEnd = it }, label = { Text("手冲终点") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = coldBrewPoint, onValueChange = { coldBrewPoint = it }, label = { Text("冷萃上限单点") }, modifier = Modifier.fillMaxWidth())
+                if (normalizationErrors.isNotEmpty()) {
+                    normalizationErrors.forEach { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "锚点常数固定为 Espresso 300/1400、Moka 500/1400、Pour-over 800/1400、Cold Brew 1.0。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                GrindNormalizationChart(curve = normalizationCurve)
             }
         }
     }

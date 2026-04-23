@@ -384,4 +384,55 @@ class DatabaseMigrationTest {
             close()
         }
     }
+
+    @Test
+    fun migrate7To8_addsGrinderNormalizationAndCollectionConfigColumns() {
+        val databaseName = "migration-test-v8"
+
+        helper.createDatabase(databaseName, 7).apply {
+            execSQL(
+                """
+                INSERT INTO archives (id, name, typeCode, isReadOnly, createdAt, updatedAt, sortOrder)
+                VALUES (1, 'Main Archive', 'normal', 0, 1000, 1000, 0)
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO grinder_profiles (
+                    id, archiveId, name, minSetting, maxSetting, stepSize, unitLabel, notes, createdAt
+                ) VALUES (
+                    3, 1, 'C40', 10.0, 30.0, 1.0, 'click', 'note', 1000
+                )
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO `collection` (
+                    id, archiveId, typeCode, title, description, hypothesis, notes, createdAt, updatedAt
+                ) VALUES (
+                    4, 1, 'experiment_project', '磨豆实验', '', '', '', 1000, 1000
+                )
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(
+            databaseName,
+            8,
+            true,
+            QoffeeDatabaseMigrations.MIGRATION_7_8,
+        ).apply {
+            val grinderCursor = query("SELECT normalizationJson FROM grinder_profiles WHERE id = 3")
+            assertTrue(grinderCursor.moveToFirst())
+            assertTrue(grinderCursor.isNull(0))
+            grinderCursor.close()
+
+            val collectionCursor = query("SELECT configJson FROM `collection` WHERE id = 4")
+            assertTrue(collectionCursor.moveToFirst())
+            assertEquals("", collectionCursor.getString(0))
+            collectionCursor.close()
+            close()
+        }
+    }
 }

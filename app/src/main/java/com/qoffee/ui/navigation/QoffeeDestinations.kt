@@ -35,13 +35,19 @@ object QoffeeDestinations {
     const val beanIdArg = "beanId"
     const val grinderIdArg = "grinderId"
     const val sessionMethodArg = "methodCode"
+    const val guideIdArg = "guideId"
+    const val experimentProjectIdArg = "projectId"
 
     const val recordDetailPattern = "record/{$recordIdArg}"
     const val recordEditorPattern = "editor?$recordIdArg={$recordIdArg}&$duplicateFromArg={$duplicateFromArg}&$recordEntryArg={$recordEntryArg}&$recipeIdArg={$recipeIdArg}&$beanIdArg={$beanIdArg}"
     const val beanEditorPattern = "bean-editor?$beanIdArg={$beanIdArg}"
     const val grinderEditorPattern = "grinder-editor?$grinderIdArg={$grinderIdArg}"
     const val recipeEditorPattern = "recipe-editor?$recipeIdArg={$recipeIdArg}"
-    const val brewSessionPattern = "brew-session?$sessionMethodArg={$sessionMethodArg}"
+    const val brewSessionPattern = "brew-session?$sessionMethodArg={$sessionMethodArg}&$guideIdArg={$guideIdArg}"
+    const val experimentsRoute = "brew/experiments"
+    const val experimentDetailPattern = "brew/experiments/{$experimentProjectIdArg}"
+    const val guidesRoute = "brew/guides"
+    const val guideDetailPattern = "brew/guides/{$guideIdArg}"
     const val myAssetsRoute = "mine/assets"
     const val myDataRoute = "mine/data"
     const val mySettingsRoute = "mine/settings"
@@ -73,5 +79,10 @@ object QoffeeDestinations {
 
     fun recipeEditor(recipeId: Long? = null): String = "recipe-editor?$recipeIdArg=${recipeId ?: -1L}"
 
-    fun brewSession(methodCode: String? = null): String = "brew-session?$sessionMethodArg=${methodCode.orEmpty()}"
+    fun brewSession(methodCode: String? = null, guideId: Long? = null): String =
+        "brew-session?$sessionMethodArg=${methodCode.orEmpty()}&$guideIdArg=${guideId ?: -1L}"
+
+    fun experimentDetail(projectId: Long): String = "brew/experiments/$projectId"
+
+    fun guideDetail(guideId: Long): String = "brew/guides/$guideId"
 }

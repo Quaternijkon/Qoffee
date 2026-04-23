@@ -31,9 +31,12 @@ import com.qoffee.core.model.AnalysisTimeRange
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.analyze
 import com.qoffee.core.model.deriveValues
+import com.qoffee.core.model.formatNormalizedGrind
 import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.domain.repository.GuideRepository
 import com.qoffee.ui.components.DashboardPage
 import com.qoffee.ui.components.EmptyStateCard
+import com.qoffee.ui.components.GrindNormalizationChart
 import com.qoffee.ui.components.LabeledValue
 import com.qoffee.ui.components.MetricCard
 import com.qoffee.ui.components.PageHeader
@@ -63,6 +66,7 @@ data class RecordDetailUiState(
 class RecordDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val recordRepository: RecordRepository,
+    private val guideRepository: GuideRepository,
 ) : ViewModel() {
     private val recordId = checkNotNull(savedStateHandle.get<Long>(QoffeeDestinations.recordIdArg))
 
@@ -114,6 +118,12 @@ class RecordDetailViewModel @Inject constructor(
             )
         }
     }
+
+    fun createGuide(onCreated: (Long) -> Unit) {
+        viewModelScope.launch {
+            onCreated(guideRepository.createGuideFromRecord(recordId))
+        }
+    }
 }
 
 @Composable
@@ -123,6 +133,7 @@ fun RecordDetailRoute(
     onEdit: (Long) -> Unit,
     onDuplicate: (Long) -> Unit,
     onDeleted: () -> Unit,
+    onGuideCreated: (Long) -> Unit,
     isReadOnlyArchive: Boolean,
     reviewContext: String?,
     viewModel: RecordDetailViewModel = hiltViewModel(),
@@ -139,6 +150,7 @@ fun RecordDetailRoute(
         onDelete = { viewModel.deleteRecord(onDeleted) },
         onSaveAsRecipe = viewModel::saveRecordAsRecipe,
         onOverwriteSourceRecipe = viewModel::overwriteSourceRecipe,
+        onCreateGuide = { viewModel.createGuide(onGuideCreated) },
     )
 }
 
@@ -155,6 +167,7 @@ private fun RecordDetailScreenLegacy(
     onDelete: () -> Unit,
     onSaveAsRecipe: (String) -> Unit,
     onOverwriteSourceRecipe: () -> Unit,
+    onCreateGuide: () -> Unit,
 ) {
     RecordDetailScreen(
         paddingValues = paddingValues,
@@ -167,6 +180,7 @@ private fun RecordDetailScreenLegacy(
         onDelete = onDelete,
         onSaveAsRecipe = onSaveAsRecipe,
         onOverwriteSourceRecipe = onOverwriteSourceRecipe,
+        onCreateGuide = onCreateGuide,
     )
     return
     /*
@@ -430,6 +444,7 @@ private fun RecordDetailScreen(
     onDelete: () -> Unit,
     onSaveAsRecipe: (String) -> Unit,
     onOverwriteSourceRecipe: () -> Unit,
+    onCreateGuide: () -> Unit,
 ) {
     val record = uiState.record
     if (record == null) {
@@ -451,6 +466,10 @@ private fun RecordDetailScreen(
         grinderProfile = record.grinderProfile,
         roastLevel = record.beanRoastLevelSnapshot,
         brewMethod = record.brewMethod,
+    )
+    val grindCurve = record.grinderProfile?.normalization?.buildCurve(
+        minSetting = record.grinderProfile.minSetting,
+        maxSetting = record.grinderProfile.maxSetting,
     )
 
     DashboardPage(paddingValues = paddingValues) {
@@ -530,6 +549,9 @@ private fun RecordDetailScreen(
                 LabeledValue(label = "总水量", value = record.totalWaterMl?.let { "${formatNumber(it)} ml" }.orEmpty(), modifier = Modifier.weight(1f))
                 LabeledValue(label = "时长", value = record.brewDurationSeconds?.let { "${it}s" }.orEmpty(), modifier = Modifier.weight(1f))
             }
+            record.normalizedGrindSetting?.let {
+                LabeledValue(label = "归一化研磨", value = formatNormalizedGrind(it), modifier = Modifier.fillMaxWidth())
+            }
             if (record.notes.isNotBlank()) {
                 Text(
                     text = record.notes,
@@ -554,6 +576,18 @@ private fun RecordDetailScreen(
                     curve = curve,
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+        }
+
+        if (grindCurve != null) {
+            SectionCard(
+                title = "研磨归一化",
+                subtitle = "把这台磨豆机的原始格数映射到统一的 0~1 坐标里，方便跨设备对比。",
+            ) {
+                record.normalizedGrindSetting?.let {
+                    StatChip(text = "当前 ${record.grindSetting?.let(::formatNumber) ?: "--"} → ${formatNormalizedGrind(it)}")
+                }
+                GrindNormalizationChart(curve = grindCurve)
             }
         }
 
@@ -621,6 +655,12 @@ private fun RecordDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("再冲一杯")
+                }
+                OutlinedButton(
+                    onClick = onCreateGuide,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("设为指导")
                 }
             }
         }

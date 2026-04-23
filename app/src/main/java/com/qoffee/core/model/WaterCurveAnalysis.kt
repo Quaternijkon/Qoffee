@@ -125,7 +125,11 @@ fun WaterCurve.analyze(
                 val waterPerSecondMl = deltaWaterMl / durationSeconds
                 val pourTempC = checkNotNull(stage.quickTemperatureC)
 
-                repeat(durationSeconds) {
+                repeat(durationSeconds) { secondIndex ->
+                    val isStirring = stage.stirringDurationSeconds > 0 && secondIndex < stage.stirringDurationSeconds
+                    val isStageImmersion = stage.isImmersion || brewMethod == BrewMethod.CLEVER_DRIPPER || 
+                        brewMethod == BrewMethod.AEROPRESS || brewMethod == BrewMethod.COLD_BREW
+                    
                     val addedWaterMl = waterPerSecondMl
                     if (addedWaterMl > 0.0) {
                         val totalHeat = (currentTotalWaterMl + container.equivalentWaterMl) * currentSystemTempC +
@@ -134,8 +138,11 @@ fun WaterCurve.analyze(
                         currentTotalWaterMl += addedWaterMl
                         currentSystemTempC = totalHeat / (currentTotalWaterMl + container.equivalentWaterMl)
                     }
+                    
+                    val activeCoolingRate = container.coolingConstantPerMinute * (if (isStirring) 3.0 else 1.0)
                     currentSystemTempC -=
-                        container.coolingConstantPerMinute * (currentSystemTempC - safeAmbient) / 60.0
+                        activeCoolingRate * (currentSystemTempC - safeAmbient) / 60.0
+                        
                     if (canEstimateCaffeine) {
                         currentCaffeineMg = estimateNextCaffeineMg(
                             currentCaffeineMg = currentCaffeineMg,
@@ -147,6 +154,8 @@ fun WaterCurve.analyze(
                             grindFactor = grindFactor,
                             roastFactor = roastFactor,
                             methodFactor = methodFactor,
+                            isImmersion = isStageImmersion,
+                            isStirring = isStirring,
                         )
                     }
                     elapsedSeconds += 1
@@ -171,10 +180,17 @@ fun WaterCurve.analyze(
                 val ambientEnd = stage.ambientEndTempC ?: safeAmbient
 
                 repeat(durationSeconds) { secondIndex ->
+                    val isStirring = stage.stirringDurationSeconds > 0 && secondIndex < stage.stirringDurationSeconds
+                    val isStageImmersion = stage.isImmersion || brewMethod == BrewMethod.CLEVER_DRIPPER || 
+                        brewMethod == BrewMethod.AEROPRESS || brewMethod == BrewMethod.COLD_BREW
+                        
                     val progress = (secondIndex + 1) / durationSeconds.toDouble()
                     val ambientAtStep = ambientStart + ((ambientEnd - ambientStart) * progress)
+                    
+                    val activeCoolingRate = container.coolingConstantPerMinute * (if (isStirring) 3.0 else 1.0)
                     currentSystemTempC -=
-                        container.coolingConstantPerMinute * (currentSystemTempC - ambientAtStep) / 60.0
+                        activeCoolingRate * (currentSystemTempC - ambientAtStep) / 60.0
+                        
                     if (canEstimateCaffeine) {
                         currentCaffeineMg = estimateNextCaffeineMg(
                             currentCaffeineMg = currentCaffeineMg,
@@ -186,6 +202,8 @@ fun WaterCurve.analyze(
                             grindFactor = grindFactor,
                             roastFactor = roastFactor,
                             methodFactor = methodFactor,
+                            isImmersion = isStageImmersion,
+                            isStirring = isStirring,
                         )
                     }
                     elapsedSeconds += 1
@@ -328,6 +346,8 @@ private fun estimateNextCaffeineMg(
     grindFactor: Double,
     roastFactor: Double,
     methodFactor: Double,
+    isImmersion: Boolean,
+    isStirring: Boolean,
 ): Double {
     if (currentBrewWaterMl <= 0.0 || currentTotalWaterMl <= 0.0) {
         return currentCaffeineMg
@@ -339,14 +359,25 @@ private fun estimateNextCaffeineMg(
     }
     val tempKelvin = currentSystemTempC + 273.15
     var rateConstant = PRE_EXPONENTIAL_FACTOR * exp(-ACTIVATION_ENERGY / (GAS_CONSTANT * tempKelvin))
-    rateConstant *= grindFactor * roastFactor * methodFactor * wettingFactor
+    
+    // Stirring aggressively breaks the boundary layer, multiplying the extraction rate
+    val stirringMultiplier = if (isStirring) 2.5 else 1.0
+    rateConstant *= grindFactor * roastFactor * methodFactor * wettingFactor * stirringMultiplier
 
     val remainingCaffeineMg = (maxPotentialCaffeineMg - currentCaffeineMg).coerceAtLeast(0.0)
     if (remainingCaffeineMg <= 0.0) {
         return currentCaffeineMg
     }
     val solidConcentration = remainingCaffeineMg / coffeeDoseG
-    val liquidConcentration = currentCaffeineMg / currentTotalWaterMl
+    
+    // Immersion maintains global equilibrium as all water stays with grounds. 
+    // Drip (non-immersion) constantly replaces slurry water, keeping local liquid concentration lower.
+    val liquidConcentration = if (isImmersion) {
+        currentCaffeineMg / currentTotalWaterMl
+    } else {
+        (currentCaffeineMg / currentTotalWaterMl) * 0.25
+    }
+    
     val drivingForce = max(0.0, solidConcentration - (liquidConcentration * PARTITION_COEFFICIENT))
     val extractedIncrement = (drivingForce * coffeeDoseG) * (1 - exp(-rateConstant))
     return (currentCaffeineMg + extractedIncrement).coerceAtMost(maxPotentialCaffeineMg)

@@ -9,6 +9,7 @@ import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.FlavorTag
 import com.qoffee.core.model.GrinderProfile
+import com.qoffee.core.model.GrindNormalizationJsonCodec
 import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RoastLevel
@@ -80,6 +81,7 @@ fun GrinderProfileEntity.toDomain() = GrinderProfile(
     maxSetting = maxSetting,
     stepSize = stepSize,
     unitLabel = unitLabel,
+    normalization = GrindNormalizationJsonCodec.decode(normalizationJson),
     notes = notes,
     createdAt = createdAt,
 )
@@ -92,6 +94,7 @@ fun GrinderProfile.toEntity() = GrinderProfileEntity(
     maxSetting = maxSetting,
     stepSize = stepSize,
     unitLabel = unitLabel,
+    normalizationJson = GrindNormalizationJsonCodec.encode(normalization),
     notes = notes,
     createdAt = createdAt,
 )

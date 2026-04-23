@@ -122,6 +122,7 @@ enum class NumericParameter(
     TOTAL_WATER("总水量", "ml"),
     BYPASS_WATER("旁路水量", "ml"),
     GRIND_SETTING("研磨格数", ""),
+    NORMALIZED_GRIND("归一化研磨度", ""),
 }
 
 enum class InsightConfidence(val displayName: String) {
@@ -179,6 +180,7 @@ data class GrinderProfile(
     val maxSetting: Double,
     val stepSize: Double,
     val unitLabel: String,
+    val normalization: GrindNormalizationProfile? = null,
     val notes: String = "",
     val createdAt: Long = 0L,
 )
@@ -266,6 +268,10 @@ data class CoffeeRecord(
     val subjectiveEvaluation: SubjectiveEvaluation? = null,
 ) {
     val hasSubjectiveScore: Boolean get() = subjectiveEvaluation?.overall != null
+    val normalizedGrindSetting: Double?
+        get() = grindSetting?.let { raw ->
+            grinderProfile?.normalization?.normalize(raw)
+        }
 }
 
 data class ObjectiveDraftUpdate(
@@ -512,15 +518,41 @@ data class BrewSession(
     val method: BrewMethod,
     val title: String,
     val practiceBlockId: String? = null,
+    val sourceGuideId: Long? = null,
     val startedAt: Long,
     val currentStageIndex: Int = 0,
+    val currentStageStartedAt: Long = startedAt,
     val stages: List<BrewStage> = emptyList(),
+    val isPaused: Boolean = false,
+    val pausedAt: Long? = null,
+    val accumulatedPauseMillis: Long = 0L,
     val isCompleted: Boolean = false,
     val completedAt: Long? = null,
 ) {
     val currentStage: BrewStage? get() = stages.getOrNull(currentStageIndex)
     val progressFraction: Float
         get() = if (stages.isEmpty()) 0f else (currentStageIndex + 1).coerceAtMost(stages.size) / stages.size.toFloat()
+
+    fun activeElapsedMillis(nowMillis: Long): Long {
+        val end = if (isCompleted) completedAt ?: nowMillis else nowMillis
+        val livePause = if (isPaused) {
+            (end - (pausedAt ?: end)).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        return (end - startedAt - accumulatedPauseMillis - livePause).coerceAtLeast(0L)
+    }
+
+    fun stageElapsedMillis(nowMillis: Long): Long {
+        return when {
+            isCompleted -> currentStage?.targetDurationSeconds?.times(1_000L) ?: 0L
+            isPaused -> {
+                val safePausedAt = pausedAt ?: nowMillis
+                (safePausedAt - currentStageStartedAt).coerceAtLeast(0L)
+            }
+            else -> (nowMillis - currentStageStartedAt).coerceAtLeast(0L)
+        }
+    }
 }
 
 data class PracticeBlock(

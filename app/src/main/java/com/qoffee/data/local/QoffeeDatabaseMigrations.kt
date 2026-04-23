@@ -1038,4 +1038,11 @@ object QoffeeDatabaseMigrations {
             db.execSQL("ALTER TABLE `brew_records` ADD COLUMN `waterCurveJson` TEXT")
         }
     }
+
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `grinder_profiles` ADD COLUMN `normalizationJson` TEXT")
+            db.execSQL("ALTER TABLE `collection` ADD COLUMN `configJson` TEXT NOT NULL DEFAULT ''")
+        }
+    }
 }

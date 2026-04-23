@@ -245,7 +245,6 @@ fun WaterCurveEditor(
     legacySummary: String?,
     modifier: Modifier = Modifier,
 ) {
-    var showAmbientDialog by remember { mutableStateOf(false) }
     var showContainerDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -269,11 +268,16 @@ fun WaterCurveEditor(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            CompactSelectionField(
+            InlineRulerField(
                 label = "室温",
-                value = ambientTempText.takeIf { it.isNotBlank() }?.let { "${it}°C" } ?: "未填",
+                value = ambientTempText,
+                onValueChange = onAmbientTempChange,
+                minValue = 0.0,
+                maxValue = 60.0,
+                step = 1.0,
+                decimals = 0,
+                unit = "°C",
                 modifier = Modifier.weight(1f),
-                onClick = { showAmbientDialog = true },
             )
             CompactSelectionField(
                 label = "容器",
@@ -340,18 +344,6 @@ fun WaterCurveEditor(
         }
     }
 
-    if (showAmbientDialog) {
-        NumericValueDialog(
-            title = "室温",
-            value = ambientTempText,
-            unit = "°C",
-            step = 1.0,
-            decimals = 0,
-            onDismiss = { showAmbientDialog = false },
-            onValueChange = onAmbientTempChange,
-        )
-    }
-
     if (showContainerDialog) {
         ThermalContainerDialog(
             selected = containerType,
@@ -377,7 +369,6 @@ private fun WaterCurveStageRow(
     onRemoveStage: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    var activeEditor by remember { mutableStateOf<StageEditField?>(null) }
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -399,53 +390,12 @@ private fun WaterCurveStageRow(
                     modifier = Modifier.widthIn(min = 46.dp),
                     maxLines = 1,
                 )
-
-                when (stage.kind) {
-                    WaterCurveStageKind.POUR -> {
-                        SummaryValueChip(
-                            label = "到达",
-                            value = stage.endTimeSeconds?.let(::formatDurationValue) ?: "未填",
-                            modifier = Modifier.weight(1f),
-                            onClick = { activeEditor = StageEditField.END_TIME },
-                        )
-                        SummaryValueChip(
-                            label = "累计",
-                            value = stage.cumulativeWaterText.takeIf { it.isNotBlank() }?.let { "${it}ml" } ?: "未填",
-                            modifier = Modifier.weight(1f),
-                            onClick = { activeEditor = StageEditField.CUMULATIVE_WATER },
-                        )
-                        SummaryValueChip(
-                            label = quickTemperatureShortLabel(temperatureMode),
-                            value = stage.quickTemperatureText.takeIf { it.isNotBlank() }?.let { "${it}°C" } ?: "未填",
-                            modifier = Modifier.weight(1f),
-                            onClick = { activeEditor = StageEditField.QUICK_TEMPERATURE },
-                        )
-                    }
-
-                    WaterCurveStageKind.WAIT -> {
-                        SummaryValueChip(
-                            label = "到达",
-                            value = stage.endTimeSeconds?.let(::formatDurationValue) ?: "未填",
-                            modifier = Modifier.weight(1f),
-                            onClick = { activeEditor = StageEditField.END_TIME },
-                        )
-                    }
-
-                    WaterCurveStageKind.BYPASS -> {
-                        SummaryValueChip(
-                            label = "旁路",
-                            value = stage.waterText.takeIf { it.isNotBlank() }?.let { "${it}ml" } ?: "未填",
-                            modifier = Modifier.weight(1f),
-                            onClick = { activeEditor = StageEditField.BYPASS_WATER },
-                        )
-                        SummaryValueChip(
-                            label = quickTemperatureShortLabel(temperatureMode),
-                            value = stage.quickTemperatureText.takeIf { it.isNotBlank() }?.let { "${it}°C" } ?: "未填",
-                            modifier = Modifier.weight(1f),
-                            onClick = { activeEditor = StageEditField.QUICK_TEMPERATURE },
-                        )
-                    }
-                }
+                Text(
+                    text = stageSummary(stage, temperatureMode),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
 
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
@@ -492,6 +442,93 @@ private fun WaterCurveStageRow(
                 }
             }
 
+            when (stage.kind) {
+                WaterCurveStageKind.POUR -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        InlineRulerField(
+                            label = "到达时间",
+                            value = stage.endTimeSeconds?.toString().orEmpty(),
+                            onValueChange = { next -> onStageChange(stage.copy(endTimeSeconds = next.toIntOrNull())) },
+                            minValue = 0.0,
+                            maxValue = 7200.0,
+                            step = 5.0,
+                            decimals = 0,
+                            unit = "s",
+                            modifier = Modifier.weight(1f),
+                        )
+                        InlineRulerField(
+                            label = "累计注水",
+                            value = stage.cumulativeWaterText,
+                            onValueChange = { onStageChange(stage.copy(cumulativeWaterText = it)) },
+                            minValue = 0.0,
+                            maxValue = 1200.0,
+                            step = 5.0,
+                            decimals = 0,
+                            unit = "ml",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    InlineRulerField(
+                        label = quickTemperatureShortLabel(temperatureMode),
+                        value = stage.quickTemperatureText,
+                        onValueChange = { onStageChange(stage.copy(quickTemperatureText = it)) },
+                        minValue = 0.0,
+                        maxValue = 100.0,
+                        step = 1.0,
+                        decimals = 0,
+                        unit = "°C",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                WaterCurveStageKind.WAIT -> {
+                    InlineRulerField(
+                        label = "等待到",
+                        value = stage.endTimeSeconds?.toString().orEmpty(),
+                        onValueChange = { next -> onStageChange(stage.copy(endTimeSeconds = next.toIntOrNull())) },
+                        minValue = 0.0,
+                        maxValue = 43200.0,
+                        step = 5.0,
+                        decimals = 0,
+                        unit = "s",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                WaterCurveStageKind.BYPASS -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        InlineRulerField(
+                            label = "旁路水量",
+                            value = stage.waterText,
+                            onValueChange = { onStageChange(stage.copy(waterText = it)) },
+                            minValue = 0.0,
+                            maxValue = 1000.0,
+                            step = 5.0,
+                            decimals = 0,
+                            unit = "ml",
+                            modifier = Modifier.weight(1f),
+                        )
+                        InlineRulerField(
+                            label = quickTemperatureShortLabel(temperatureMode),
+                            value = stage.quickTemperatureText,
+                            onValueChange = { onStageChange(stage.copy(quickTemperatureText = it)) },
+                            minValue = 0.0,
+                            maxValue = 100.0,
+                            step = 1.0,
+                            decimals = 0,
+                            unit = "°C",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
             AnimatedVisibility(visible = stage.showAdvancedTemperature) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -501,20 +538,26 @@ private fun WaterCurveStageRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        NumericStepField(
-                            label = "起始温度 (°C)",
+                        InlineRulerField(
+                            label = "起始温度",
                             value = stage.startTempText,
                             onValueChange = { onStageChange(stage.copy(startTempText = it)) },
+                            minValue = 0.0,
+                            maxValue = 100.0,
                             step = 1.0,
                             decimals = 0,
+                            unit = "°C",
                             modifier = Modifier.weight(1f),
                         )
-                        NumericStepField(
-                            label = "结束温度 (°C)",
+                        InlineRulerField(
+                            label = "结束温度",
                             value = stage.endTempText,
                             onValueChange = { onStageChange(stage.copy(endTempText = it)) },
+                            minValue = 0.0,
+                            maxValue = 100.0,
                             step = 1.0,
                             decimals = 0,
+                            unit = "°C",
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -523,20 +566,26 @@ private fun WaterCurveStageRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            NumericStepField(
-                                label = "环境起始 (°C)",
+                            InlineRulerField(
+                                label = "环境起始",
                                 value = stage.ambientStartTempText,
                                 onValueChange = { onStageChange(stage.copy(ambientStartTempText = it)) },
+                                minValue = 0.0,
+                                maxValue = 100.0,
                                 step = 1.0,
                                 decimals = 0,
+                                unit = "°C",
                                 modifier = Modifier.weight(1f),
                             )
-                            NumericStepField(
-                                label = "环境结束 (°C)",
+                            InlineRulerField(
+                                label = "环境结束",
                                 value = stage.ambientEndTempText,
                                 onValueChange = { onStageChange(stage.copy(ambientEndTempText = it)) },
+                                minValue = 0.0,
+                                maxValue = 100.0,
                                 step = 1.0,
                                 decimals = 0,
+                                unit = "°C",
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -545,48 +594,40 @@ private fun WaterCurveStageRow(
             }
         }
     }
+}
 
-    when (activeEditor) {
-        StageEditField.END_TIME -> DurationPickerDialog(
-            initialValueSeconds = stage.endTimeSeconds,
-            onDismiss = { activeEditor = null },
-            onConfirm = {
-                onStageChange(stage.copy(endTimeSeconds = it))
-                activeEditor = null
-            },
-        )
+private fun stageSummary(
+    stage: WaterCurveStageEditorState,
+    temperatureMode: WaterCurveTemperatureMode,
+): String {
+    return when (stage.kind) {
+        WaterCurveStageKind.POUR -> buildString {
+            append(stage.endTimeSeconds?.let(::formatDurationValue) ?: "未填")
+            append(" · ")
+            append(stage.cumulativeWaterText.ifBlank { "未填" })
+            append("ml")
+            stage.quickTemperatureText.takeIf { it.isNotBlank() }?.let {
+                append(" · ")
+                append(quickTemperatureShortLabel(temperatureMode))
+                append(" ")
+                append(it)
+                append("°C")
+            }
+        }
 
-        StageEditField.CUMULATIVE_WATER -> NumericValueDialog(
-            title = "累计注水",
-            value = stage.cumulativeWaterText,
-            unit = "ml",
-            step = 10.0,
-            decimals = 0,
-            onDismiss = { activeEditor = null },
-            onValueChange = { onStageChange(stage.copy(cumulativeWaterText = it)) },
-        )
-
-        StageEditField.BYPASS_WATER -> NumericValueDialog(
-            title = "旁路水量",
-            value = stage.waterText,
-            unit = "ml",
-            step = 10.0,
-            decimals = 0,
-            onDismiss = { activeEditor = null },
-            onValueChange = { onStageChange(stage.copy(waterText = it)) },
-        )
-
-        StageEditField.QUICK_TEMPERATURE -> NumericValueDialog(
-            title = quickTemperatureShortLabel(temperatureMode),
-            value = stage.quickTemperatureText,
-            unit = "°C",
-            step = 1.0,
-            decimals = 0,
-            onDismiss = { activeEditor = null },
-            onValueChange = { onStageChange(stage.copy(quickTemperatureText = it)) },
-        )
-
-        null -> Unit
+        WaterCurveStageKind.WAIT -> "等待到 ${stage.endTimeSeconds?.let(::formatDurationValue) ?: "未填"}"
+        WaterCurveStageKind.BYPASS -> buildString {
+            append("旁路 ")
+            append(stage.waterText.ifBlank { "未填" })
+            append("ml")
+            stage.quickTemperatureText.takeIf { it.isNotBlank() }?.let {
+                append(" · ")
+                append(quickTemperatureShortLabel(temperatureMode))
+                append(" ")
+                append(it)
+                append("°C")
+            }
+        }
     }
 }
 
@@ -931,6 +972,8 @@ private fun CurvePlotPanel(
         val tickValues = listOf(axisMin, axisMin + (range / 2.0), axisMax)
         val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
         val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+        val primaryColor = MaterialTheme.colorScheme.primary
+        val secondaryColor = MaterialTheme.colorScheme.secondary
 
         Canvas(
             modifier = Modifier
@@ -970,6 +1013,58 @@ private fun CurvePlotPanel(
                     y + 4.dp.toPx(),
                     yLabelPaint,
                 )
+            }
+
+            timeline.forEach { segment ->
+                if (segment.isImmersion) {
+                    val startX = leftPadding + segment.startFraction * plotWidth
+                    val endX = leftPadding + segment.endFraction * plotWidth
+                    val width = endX - startX
+                    
+                    drawRect(
+                        color = primaryColor.copy(alpha = 0.1f),
+                        topLeft = Offset(startX, topPadding),
+                        size = androidx.compose.ui.geometry.Size(width, plotHeight),
+                    )
+                    
+                    val hatchSpacing = 8.dp.toPx()
+                    var x = startX
+                    while (x < endX) {
+                        drawLine(
+                            color = primaryColor.copy(alpha = 0.3f),
+                            start = Offset(x, topPadding),
+                            end = Offset(x + hatchSpacing * 0.7f, topPadding + plotHeight),
+                            strokeWidth = 1.5.dp.toPx(),
+                        )
+                        x += hatchSpacing
+                    }
+                }
+                
+                if (segment.stirringDurationSeconds > 0) {
+                    val startX = leftPadding + segment.startFraction * plotWidth
+                    val endX = leftPadding + segment.endFraction * plotWidth
+                    val stirringFraction = segment.stirringDurationSeconds.toFloat() / 
+                        (segment.endSeconds - segment.startSeconds).coerceAtLeast(1)
+                    val stirringWidth = (endX - startX) * stirringFraction
+                    
+                    drawRect(
+                        color = secondaryColor.copy(alpha = 0.1f),
+                        topLeft = Offset(startX, topPadding),
+                        size = androidx.compose.ui.geometry.Size(stirringWidth, plotHeight),
+                    )
+                    
+                    val hatchSpacing = 8.dp.toPx()
+                    var yPos = topPadding
+                    while (yPos < topPadding + plotHeight) {
+                        drawLine(
+                            color = secondaryColor.copy(alpha = 0.3f),
+                            start = Offset(startX, yPos),
+                            end = Offset(startX + stirringWidth, yPos + hatchSpacing * 0.7f),
+                            strokeWidth = 1.5.dp.toPx(),
+                        )
+                        yPos += hatchSpacing
+                    }
+                }
             }
 
             timeline.filter { it.isTimed }.forEach { segment ->
@@ -1044,6 +1139,8 @@ internal data class WaterCurveChartSegment(
     val cumulativeEndSeconds: Int,
     val isTimed: Boolean,
     val isBypass: Boolean,
+    val isImmersion: Boolean = false,
+    val stirringDurationSeconds: Int = 0,
     val calloutLines: List<String>,
 )
 
@@ -1093,6 +1190,8 @@ internal fun buildWaterCurveChartLayout(curve: WaterCurve): List<WaterCurveChart
                     cumulativeEndSeconds = stage.endTimeSeconds,
                     isTimed = true,
                     isBypass = false,
+                    isImmersion = stage.isImmersion,
+                    stirringDurationSeconds = stage.stirringDurationSeconds,
                     calloutLines = listOf(
                         formatWaterCurveDuration(stage.endTimeSeconds),
                         "${formatWaterCurveNumber(stage.cumulativeWaterMl)}ml",
@@ -1118,6 +1217,8 @@ internal fun buildWaterCurveChartLayout(curve: WaterCurve): List<WaterCurveChart
                     cumulativeEndSeconds = stage.endTimeSeconds,
                     isTimed = true,
                     isBypass = false,
+                    isImmersion = stage.isImmersion,
+                    stirringDurationSeconds = stage.stirringDurationSeconds,
                     calloutLines = listOf(formatWaterCurveDuration(stage.endTimeSeconds)),
                 )
                 previousTimedEnd = stage.endTimeSeconds
@@ -1137,6 +1238,8 @@ internal fun buildWaterCurveChartLayout(curve: WaterCurve): List<WaterCurveChart
                     startSeconds = previousTimedEnd,
                     endSeconds = previousTimedEnd,
                     cumulativeEndSeconds = previousTimedEnd,
+                    isImmersion = false,
+                    stirringDurationSeconds = 0,
                     isTimed = false,
                     isBypass = true,
                     calloutLines = listOf("旁路 ${formatWaterCurveNumber(stage.waterMl)}ml"),

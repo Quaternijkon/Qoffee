@@ -40,7 +40,7 @@ import androidx.room.RoomDatabase
         AttachmentEntity::class,
         ImportLogEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class QoffeeDatabase : RoomDatabase() {

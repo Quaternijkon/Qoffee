@@ -58,6 +58,7 @@ class BrewSessionViewModel @Inject constructor(
     private val requestedMethod = BrewMethod.fromCode(
         savedStateHandle.get<String>(QoffeeDestinations.sessionMethodArg)?.ifBlank { null },
     )
+    private val requestedGuideId = savedStateHandle.get<Long>(QoffeeDestinations.guideIdArg)?.takeIf { it > 0L }
 
     val session: StateFlow<BrewSession?> = sessionRepository.observeActiveSession().stateIn(
         scope = viewModelScope,
@@ -67,7 +68,12 @@ class BrewSessionViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            requestedMethod?.let { method ->
+            requestedGuideId?.let { guideId ->
+                val current = sessionRepository.observeActiveSession().first()
+                if (current == null || current.sourceGuideId != guideId || current.isCompleted) {
+                    sessionRepository.startGuideSession(guideId)
+                }
+            } ?: requestedMethod?.let { method ->
                 val current = sessionRepository.observeActiveSession().first()
                 if (current == null || current.method != method || current.isCompleted) {
                     sessionRepository.startSession(method)
@@ -99,6 +105,18 @@ class BrewSessionViewModel @Inject constructor(
         }
     }
 
+    fun pauseSession() {
+        viewModelScope.launch {
+            sessionRepository.pauseActiveSession()
+        }
+    }
+
+    fun resumeSession() {
+        viewModelScope.launch {
+            sessionRepository.resumeActiveSession()
+        }
+    }
+
     fun finishSession() {
         viewModelScope.launch {
             sessionRepository.finishActiveSession()
@@ -127,6 +145,8 @@ fun BrewSessionRoute(
         onStartMethod = viewModel::startSession,
         onPreviousStage = viewModel::previousStage,
         onNextStage = viewModel::nextStage,
+        onPauseSession = viewModel::pauseSession,
+        onResumeSession = viewModel::resumeSession,
         onFinishSession = viewModel::finishSession,
         onDiscardSession = viewModel::discardSession,
         onOpenRecordEditor = onOpenRecordEditor,
@@ -141,6 +161,8 @@ private fun BrewSessionScreen(
     onStartMethod: (BrewMethod) -> Unit,
     onPreviousStage: () -> Unit,
     onNextStage: () -> Unit,
+    onPauseSession: () -> Unit,
+    onResumeSession: () -> Unit,
     onFinishSession: () -> Unit,
     onDiscardSession: () -> Unit,
     onOpenRecordEditor: () -> Unit,
@@ -173,8 +195,26 @@ private fun BrewSessionScreen(
             delay(1_000)
         }
     }
-    val elapsedSeconds = ((if (session.isCompleted) session.completedAt ?: nowMillis else nowMillis) - session.startedAt).coerceAtLeast(0L) / 1_000L
+    val elapsedSeconds = session.activeElapsedMillis(nowMillis).coerceAtLeast(0L) / 1_000L
     val currentStage = session.currentStage
+    val stageElapsedSeconds = session.stageElapsedMillis(nowMillis).coerceAtLeast(0L) / 1_000L
+    val remainingStageSeconds = currentStage?.let { (it.targetDurationSeconds - stageElapsedSeconds.toInt()).coerceAtLeast(0) } ?: 0
+
+    LaunchedEffect(session.id, session.currentStageIndex, session.isPaused, session.isCompleted) {
+        while (!session.isCompleted) {
+            val stage = session.currentStage ?: break
+            val liveNow = System.currentTimeMillis()
+            if (!session.isPaused && session.stageElapsedMillis(liveNow) >= stage.targetDurationSeconds * 1_000L) {
+                if (session.currentStageIndex >= session.stages.lastIndex) {
+                    onFinishSession()
+                } else {
+                    onNextStage()
+                }
+                break
+            }
+            delay(250)
+        }
+    }
 
     DashboardPage(paddingValues = paddingValues) {
         PageHeader(
@@ -197,7 +237,7 @@ private fun BrewSessionScreen(
                 MetricCard(
                     label = "已用时间",
                     value = formatElapsed(elapsedSeconds.toInt()),
-                    supporting = "整个会话的累计时长",
+                    supporting = if (session.isPaused) "当前已暂停" else "整个会话的累计时长",
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -229,6 +269,11 @@ private fun BrewSessionScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(text = stage.title, style = MaterialTheme.typography.headlineMedium)
                         Text(
+                            text = formatElapsed(remainingStageSeconds),
+                            style = MaterialTheme.typography.displaySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
                             text = stage.instruction,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -244,7 +289,7 @@ private fun BrewSessionScreen(
                             )
                         }
                         Text(
-                            text = "建议阶段时长：${formatElapsed(stage.targetDurationSeconds)}",
+                            text = "建议阶段时长：${formatElapsed(stage.targetDurationSeconds)} · 已进行 ${formatElapsed(stageElapsedSeconds.toInt())}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -258,6 +303,14 @@ private fun BrewSessionScreen(
                     enabled = session.currentStageIndex > 0,
                 ) {
                     Text("上一步")
+                }
+                OutlinedButton(
+                    onClick = {
+                        if (session.isPaused) onResumeSession() else onPauseSession()
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (session.isPaused) "继续" else "暂停")
                 }
                 Button(
                     onClick = onNextStage,

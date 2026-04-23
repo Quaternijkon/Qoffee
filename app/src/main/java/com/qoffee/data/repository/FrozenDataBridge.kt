@@ -45,6 +45,7 @@ import com.qoffee.data.local.BrewRunFrozenEntity
 import com.qoffee.data.local.BeanProfileDao
 import com.qoffee.data.local.BrewRecordDao
 import com.qoffee.data.local.BrewRecordEntity
+import com.qoffee.data.mapper.toDomain
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -121,6 +122,17 @@ class FrozenDataBridge @Inject constructor(
     suspend fun upsertGrinderFromLegacy(grinderId: Long) = database.withTransaction {
         ensureSystemSeeded()
         upsertGrinderInternal(grinderId)
+    }
+
+    suspend fun reprojectRunsForGrinder(grinderId: Long) = database.withTransaction {
+        ensureSystemSeeded()
+        val grinder = grinderProfileDao.getById(grinderId) ?: return@withTransaction
+        brewRecordDao.getAllByArchive(grinder.archiveId)
+            .asSequence()
+            .filter { row -> row.record.grinderId == grinderId }
+            .forEach { row ->
+                upsertRunInternal(row.record.id)
+            }
     }
 
     suspend fun softDeleteGrinder(grinderId: Long) = database.withTransaction {
@@ -253,6 +265,7 @@ class FrozenDataBridge @Inject constructor(
                 maxValue = grinder.maxSetting,
                 stepSize = grinder.stepSize,
                 defaultUnitCode = grinder.unitLabel,
+                specJson = grinder.normalizationJson.orEmpty(),
                 notes = grinder.notes,
                 isActive = true,
                 createdAt = grinder.createdAt,
@@ -437,6 +450,7 @@ class FrozenDataBridge @Inject constructor(
     private suspend fun replaceRunObservations(recordId: Long, row: BrewRecordEntity, archiveId: Long) {
         val managedMetricIds = listOf(
             metricId("grind_setting"),
+            metricId("grind_setting_normalized"),
             metricId("coffee_dose_g"),
             metricId("brew_water_ml"),
             metricId("bypass_water_ml"),
@@ -456,8 +470,16 @@ class FrozenDataBridge @Inject constructor(
         observationDao.deleteForSubjectMetrics("run", recordId, managedMetricIds)
         val sourceCode = if (row.status == com.qoffee.core.model.RecordStatus.DRAFT.code) "manual" else "migrated"
         val runSourceId = sourceId(sourceCode)
+        val normalizedGrindSetting = if (row.grindSetting != null) {
+            brewRecordDao.getById(recordId)?.toDomain()?.normalizedGrindSetting
+        } else {
+            null
+        }
         val observations = mutableListOf<ObservationEntity>().apply {
             row.grindSetting?.let { add(runNumericObservation(archiveId, recordId, "grind_setting", it, "ratio", row.updatedAt, runSourceId)) }
+            normalizedGrindSetting?.let {
+                add(runNumericObservation(archiveId, recordId, "grind_setting_normalized", it, "ratio", row.updatedAt, sourceId("derived")))
+            }
             row.coffeeDoseG?.let { add(runNumericObservation(archiveId, recordId, "coffee_dose_g", it, "g", row.updatedAt, runSourceId)) }
             row.brewWaterMl?.let { add(runNumericObservation(archiveId, recordId, "brew_water_ml", it, "ml", row.updatedAt, runSourceId)) }
             row.bypassWaterMl?.let { add(runNumericObservation(archiveId, recordId, "bypass_water_ml", it, "ml", row.updatedAt, runSourceId)) }
@@ -670,6 +692,7 @@ private object FrozenSeedCatalog {
 
     val metrics = listOf(
         metric("grind_setting", "Grind Setting", defaultUnitCode = "ratio", isFilterable = true, isChartable = true),
+        metric("grind_setting_normalized", "Normalized Grind", defaultUnitCode = "ratio", isFilterable = true, isChartable = true),
         metric("coffee_dose_g", "Coffee Dose", defaultUnitCode = "g", isFilterable = true, isChartable = true),
         metric("brew_water_ml", "Brew Water", defaultUnitCode = "ml", isFilterable = true, isChartable = true),
         metric("bypass_water_ml", "Bypass Water", defaultUnitCode = "ml", isChartable = true),

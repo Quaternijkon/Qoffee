@@ -119,6 +119,7 @@ class CatalogRepositoryImpl @Inject constructor(
             profile.id
         }.also { grinderId ->
             frozenDataBridge.upsertGrinderFromLegacy(grinderId)
+            frozenDataBridge.reprojectRunsForGrinder(grinderId)
         }
     }
 

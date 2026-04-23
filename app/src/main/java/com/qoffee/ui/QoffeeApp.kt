@@ -70,6 +70,10 @@ import androidx.navigation.navArgument
 import com.qoffee.core.model.ArchiveSummary
 import com.qoffee.feature.analytics.AnalysisRoute
 import com.qoffee.feature.brew.BrewSessionRoute
+import com.qoffee.feature.experiments.ExperimentLabRoute
+import com.qoffee.feature.experiments.ExperimentProjectRoute
+import com.qoffee.feature.guides.GuideDetailRoute
+import com.qoffee.feature.guides.GuideLibraryRoute
 import com.qoffee.feature.learn.LearnRoute
 import com.qoffee.feature.profile.BeanAssetEditorRoute
 import com.qoffee.feature.profile.GrinderEditorRoute
@@ -343,8 +347,8 @@ private fun QoffeeNavHost(
                 onOpenDetail = { recordId ->
                     navigateForward(QoffeeDestinations.recordDetail(recordId))
                 },
-                onOpenSession = { method ->
-                    navigateForward(QoffeeDestinations.brewSession(method.code))
+                onOpenSession = { method, guideId ->
+                    navigateForward(QoffeeDestinations.brewSession(method.code, guideId))
                 },
                 onOpenEditor = { recordId, duplicateFrom, entry, recipeId, beanId ->
                     navigateForward(
@@ -365,6 +369,8 @@ private fun QoffeeNavHost(
                         restoreState = true
                     }
                 },
+                onOpenExperiments = { navigateForward(QoffeeDestinations.experimentsRoute) },
+                onOpenGuides = { navigateForward(QoffeeDestinations.guidesRoute) },
             )
         }
         composable(TopLevelDestination.Learn.route) {
@@ -381,6 +387,9 @@ private fun QoffeeNavHost(
                         reviewContext,
                     )
                     navigateForward(QoffeeDestinations.recordDetail(recordId))
+                },
+                onOpenExperimentProject = { projectId ->
+                    navigateForward(QoffeeDestinations.experimentDetail(projectId))
                 },
             )
         }
@@ -487,6 +496,10 @@ private fun QoffeeNavHost(
                     type = NavType.StringType
                     defaultValue = ""
                 },
+                navArgument(QoffeeDestinations.guideIdArg) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
             ),
         ) {
             BrewSessionRoute(
@@ -498,6 +511,58 @@ private fun QoffeeNavHost(
                             entry = RecordEditorEntry.NEW,
                         ),
                     )
+                },
+            )
+        }
+        composable(QoffeeDestinations.experimentsRoute) {
+            ExperimentLabRoute(
+                paddingValues = paddingValues,
+                onBack = ::popBack,
+                onOpenProject = { projectId -> navigateForward(QoffeeDestinations.experimentDetail(projectId)) },
+                onProjectCreated = { projectId -> navigateForward(QoffeeDestinations.experimentDetail(projectId)) },
+            )
+        }
+        composable(
+            route = QoffeeDestinations.experimentDetailPattern,
+            arguments = listOf(
+                navArgument(QoffeeDestinations.experimentProjectIdArg) {
+                    type = NavType.LongType
+                },
+            ),
+        ) {
+            ExperimentProjectRoute(
+                paddingValues = paddingValues,
+                onBack = ::popBack,
+                onOpenDraft = { recordId ->
+                    navigateForward(
+                        QoffeeDestinations.recordEditor(
+                            recordId = recordId,
+                            entry = RecordEditorEntry.DRAFT,
+                        ),
+                    )
+                },
+            )
+        }
+        composable(QoffeeDestinations.guidesRoute) {
+            GuideLibraryRoute(
+                paddingValues = paddingValues,
+                onBack = ::popBack,
+                onOpenGuide = { guideId -> navigateForward(QoffeeDestinations.guideDetail(guideId)) },
+            )
+        }
+        composable(
+            route = QoffeeDestinations.guideDetailPattern,
+            arguments = listOf(
+                navArgument(QoffeeDestinations.guideIdArg) {
+                    type = NavType.LongType
+                },
+            ),
+        ) {
+            GuideDetailRoute(
+                paddingValues = paddingValues,
+                onBack = ::popBack,
+                onStart = { guideId ->
+                    navigateForward(QoffeeDestinations.brewSession(guideId = guideId))
                 },
             )
         }
@@ -615,6 +680,7 @@ private fun QoffeeNavHost(
                     )
                 },
                 onDeleted = ::popBack,
+                onGuideCreated = { guideId -> navigateForward(QoffeeDestinations.guideDetail(guideId)) },
                 isReadOnlyArchive = currentArchive?.archive?.isReadOnly == true,
                 reviewContext = reviewContext,
             )

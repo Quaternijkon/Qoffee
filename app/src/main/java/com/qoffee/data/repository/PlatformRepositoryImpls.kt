@@ -10,6 +10,7 @@ import com.qoffee.core.model.EntitlementTier
 import com.qoffee.core.model.Experiment
 import com.qoffee.core.model.ExperimentRun
 import com.qoffee.core.model.ExperimentStatus
+import com.qoffee.core.model.GuideTemplate
 import com.qoffee.core.model.GlossaryTerm
 import com.qoffee.core.model.LearningTrack
 import com.qoffee.core.model.Lesson
@@ -23,6 +24,7 @@ import com.qoffee.core.model.TroubleshootingItem
 import com.qoffee.core.model.UserEntitlements
 import com.qoffee.domain.repository.EntitlementRepository
 import com.qoffee.domain.repository.ExperimentRepository
+import com.qoffee.domain.repository.GuideRepository
 import com.qoffee.domain.repository.LearningRepository
 import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
@@ -39,6 +41,7 @@ import kotlinx.coroutines.flow.map
 @Singleton
 class SessionRepositoryImpl @Inject constructor(
     private val timeProvider: TimeProvider,
+    private val guideRepository: GuideRepository,
 ) : SessionRepository {
 
     private val activeSession = MutableStateFlow<BrewSession?>(null)
@@ -46,13 +49,40 @@ class SessionRepositoryImpl @Inject constructor(
     override fun observeActiveSession(): Flow<BrewSession?> = activeSession
 
     override suspend fun startSession(method: BrewMethod, practiceBlockId: String?): BrewSession {
+        val now = timeProvider.nowMillis()
         val session = BrewSession(
-            id = "session-${method.code}-${timeProvider.nowMillis()}",
+            id = "session-${method.code}-$now",
             method = method,
             title = "${method.displayName} 主动冲煮会话",
             practiceBlockId = practiceBlockId,
-            startedAt = timeProvider.nowMillis(),
+            startedAt = now,
+            currentStageStartedAt = now,
             stages = buildStages(method),
+        )
+        activeSession.value = session
+        return session
+    }
+
+    override suspend fun startGuideSession(guideId: Long): BrewSession {
+        val guide = checkNotNull(guideRepository.getGuide(guideId)) { "指导不存在。" }
+        val now = timeProvider.nowMillis()
+        val session = BrewSession(
+            id = "guide-$guideId-$now",
+            method = guide.brewMethod ?: BrewMethod.POUR_OVER,
+            title = guide.title,
+            sourceGuideId = guide.id,
+            startedAt = now,
+            currentStageStartedAt = now,
+            stages = guide.stages.map { stage ->
+                com.qoffee.core.model.BrewStage(
+                    id = stage.id,
+                    title = stage.title,
+                    instruction = stage.instruction,
+                    targetDurationSeconds = stage.targetDurationSeconds,
+                    targetValueLabel = stage.targetValueLabel,
+                    tip = stage.tip,
+                )
+            },
         )
         activeSession.value = session
         return session
@@ -62,17 +92,43 @@ class SessionRepositoryImpl @Inject constructor(
         val current = activeSession.value ?: return
         if (current.isCompleted) return
         val nextIndex = (current.currentStageIndex + 1).coerceAtMost(current.stages.lastIndex)
-        activeSession.value = if (nextIndex == current.stages.lastIndex) {
-            current.copy(currentStageIndex = nextIndex)
-        } else {
-            current.copy(currentStageIndex = nextIndex)
-        }
+        activeSession.value = current.copy(
+            currentStageIndex = nextIndex,
+            currentStageStartedAt = timeProvider.nowMillis(),
+            isPaused = false,
+            pausedAt = null,
+        )
     }
 
     override suspend fun moveToPreviousStage() {
         val current = activeSession.value ?: return
         activeSession.value = current.copy(
             currentStageIndex = (current.currentStageIndex - 1).coerceAtLeast(0),
+            currentStageStartedAt = timeProvider.nowMillis(),
+            isPaused = false,
+            pausedAt = null,
+        )
+    }
+
+    override suspend fun pauseActiveSession() {
+        val current = activeSession.value ?: return
+        if (current.isPaused || current.isCompleted) return
+        activeSession.value = current.copy(
+            isPaused = true,
+            pausedAt = timeProvider.nowMillis(),
+        )
+    }
+
+    override suspend fun resumeActiveSession() {
+        val current = activeSession.value ?: return
+        if (!current.isPaused || current.isCompleted) return
+        val now = timeProvider.nowMillis()
+        val pausedDuration = (now - (current.pausedAt ?: now)).coerceAtLeast(0L)
+        activeSession.value = current.copy(
+            isPaused = false,
+            pausedAt = null,
+            currentStageStartedAt = current.currentStageStartedAt + pausedDuration,
+            accumulatedPauseMillis = current.accumulatedPauseMillis + pausedDuration,
         )
     }
 
@@ -81,6 +137,8 @@ class SessionRepositoryImpl @Inject constructor(
         activeSession.value = current.copy(
             isCompleted = true,
             currentStageIndex = current.stages.lastIndex.coerceAtLeast(0),
+            isPaused = false,
+            pausedAt = null,
             completedAt = timeProvider.nowMillis(),
         )
     }
@@ -219,7 +277,7 @@ class ExperimentRepositoryImpl @Inject constructor(
     private val recipeRepository: RecipeRepository,
     private val recordRepository: RecordRepository,
     private val timeProvider: TimeProvider,
-) : ExperimentRepository {
+) {
 
     private val practiceBlocks = listOf(
         PracticeBlock("block-pour-over-7-day", "7 天手冲入门", "以固定比例和固定豆量建立第一套稳定的手冲节奏。", BrewMethod.POUR_OVER, "建立基础手冲框架", 7, SkillLevel.BEGINNER),
@@ -227,9 +285,9 @@ class ExperimentRepositoryImpl @Inject constructor(
         PracticeBlock("block-temp-ab", "水温 AB Test", "同配方对比不同水温下的杯感差异。", BrewMethod.POUR_OVER, "建立参数实验思路", 4, SkillLevel.ADVANCED, proOnly = true),
     )
 
-    override fun observePracticeBlocks(): Flow<List<PracticeBlock>> = flowOf(practiceBlocks)
+    fun observePracticeBlocks(): Flow<List<PracticeBlock>> = flowOf(practiceBlocks)
 
-    override fun observeRecipeVersions(): Flow<List<RecipeVersion>> = combine(
+    fun observeRecipeVersions(): Flow<List<RecipeVersion>> = combine(
         recipeRepository.observeRecipes(),
         recordRepository.observeRecentRecords(limit = 6),
     ) { recipes, recentRecords ->
@@ -272,7 +330,7 @@ class ExperimentRepositoryImpl @Inject constructor(
         }.distinctBy { it.id }
     }
 
-    override fun observeExperiments(): Flow<List<Experiment>> = combine(
+    fun observeExperiments(): Flow<List<Experiment>> = combine(
         observePracticeBlocks(),
         observeRecipeVersions(),
     ) { blocks, versions ->
@@ -303,7 +361,7 @@ class ExperimentRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun observeExperimentRuns(): Flow<List<ExperimentRun>> =
+    fun observeExperimentRuns(): Flow<List<ExperimentRun>> =
         recordRepository.observeRecentRecords(limit = 6).map { records ->
             records.take(6).mapIndexed { index, record ->
                 ExperimentRun(
@@ -318,7 +376,7 @@ class ExperimentRepositoryImpl @Inject constructor(
             }
         }
 
-    override fun observeBeanInventory(): Flow<List<BeanInventory>> =
+    fun observeBeanInventory(): Flow<List<BeanInventory>> =
         recordRepository.observeRecords().map { records ->
             val usageByBean = records
                 .filter { it.beanProfileId != null }

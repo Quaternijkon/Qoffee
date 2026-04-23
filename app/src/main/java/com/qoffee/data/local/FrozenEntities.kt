@@ -382,6 +382,7 @@ data class CollectionEntity(
     val title: String,
     val description: String = "",
     val hypothesis: String = "",
+    val configJson: String = "",
     val notes: String = "",
     val createdAt: Long,
     val updatedAt: Long,

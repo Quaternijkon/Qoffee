@@ -494,6 +494,7 @@ class AnalyticsEngine @Inject constructor(
             NumericParameter.TOTAL_WATER -> record.totalWaterMl
             NumericParameter.BYPASS_WATER -> record.bypassWaterMl
             NumericParameter.GRIND_SETTING -> record.grindSetting
+            NumericParameter.NORMALIZED_GRIND -> record.normalizedGrindSetting
         }
     }
 

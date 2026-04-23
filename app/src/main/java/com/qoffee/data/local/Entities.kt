@@ -74,6 +74,7 @@ data class GrinderProfileEntity(
     val maxSetting: Double,
     val stepSize: Double,
     val unitLabel: String,
+    val normalizationJson: String? = null,
     val notes: String,
     val createdAt: Long,
 )

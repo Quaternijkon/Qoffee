@@ -48,6 +48,8 @@ data class PourStage(
     val quickTemperatureC: Double? = null,
     val startTempC: Double? = null,
     val endTempC: Double? = null,
+    val isImmersion: Boolean = false,
+    val stirringDurationSeconds: Int = 0,
 ) : WaterCurveStage
 
 data class WaitStage(
@@ -56,6 +58,8 @@ data class WaitStage(
     val endTempC: Double? = null,
     val ambientStartTempC: Double? = null,
     val ambientEndTempC: Double? = null,
+    val isImmersion: Boolean = false,
+    val stirringDurationSeconds: Int = 0,
 ) : WaterCurveStage
 
 data class BypassStage(

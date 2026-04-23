@@ -50,6 +50,7 @@ import com.qoffee.core.model.analyze
 import com.qoffee.core.model.buildLegacyWaterCurve
 import com.qoffee.core.model.buildLegacyWaterCurveSummary
 import com.qoffee.core.model.deriveValues
+import com.qoffee.core.model.formatNormalizedGrind
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.PreferenceRepository
 import com.qoffee.domain.repository.RecipeRepository
@@ -59,6 +60,8 @@ import com.qoffee.ui.components.BeanIdentityCard
 import com.qoffee.ui.components.DropdownField
 import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.EmptyStateCard
+import com.qoffee.ui.components.GrindDialField
+import com.qoffee.ui.components.InlineRulerField
 import com.qoffee.ui.components.NumericStepField
 import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.MovieRatingSelector
@@ -1060,6 +1063,8 @@ private fun RecordEditorScreen(
     var showSaveRecipeDialog by remember { mutableStateOf(false) }
     val selectedBean = uiState.beans.firstOrNull { it.id == uiState.objective.beanProfileId }
     val selectedGrinder = uiState.grinders.firstOrNull { it.id == uiState.objective.grinderProfileId }
+    val normalizedGrindValue = uiState.objective.grindSetting.toDoubleOrNull()
+        ?.let { raw -> selectedGrinder?.normalization?.normalize(raw) }
     val waterCurveResult = buildWaterCurveFormResult(
         temperatureMode = uiState.objective.waterCurveTemperatureMode,
         ambientTempText = uiState.objective.waterCurveAmbientTempC,
@@ -1190,23 +1195,39 @@ private fun RecordEditorScreen(
                     onValueChange = { onBrewedAtChange(it) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                NumericStepField(
-                    label = "研磨格数",
+                GrindDialField(
+                    label = selectedGrinder?.let { "${it.name} 刻度" } ?: "研磨格数",
                     value = uiState.objective.grindSetting,
                     onValueChange = onGrindSettingChange,
-                    step = 1.0,
+                    minValue = selectedGrinder?.minSetting ?: 0.0,
+                    maxValue = selectedGrinder?.maxSetting ?: 40.0,
+                    step = selectedGrinder?.stepSize ?: 1.0,
                     decimals = 1,
                     referenceValue = uiState.referenceRecord?.grindSetting?.let(::formatNumber),
+                    normalizedValueText = normalizedGrindValue?.let(::formatNormalizedGrind),
                 )
-                NumericStepField(
-                    label = "咖啡粉重量（g）",
+                InlineRulerField(
+                    label = "咖啡粉重量",
                     value = uiState.objective.coffeeDoseG,
                     onValueChange = onCoffeeDoseChange,
+                    minValue = 0.0,
+                    maxValue = 60.0,
                     step = 0.5,
                     decimals = 1,
-                    quickValues = listOf("15", "18", "20"),
+                    unit = "g",
                     referenceValue = uiState.referenceRecord?.coffeeDoseG?.let { "${formatNumber(it)} g" },
                 )
+                if (waterCurveDerivedValues != null) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        waterCurveDerivedValues.brewWaterMl?.let { StatChip(text = "萃取水 ${formatNumber(it)}ml") }
+                        waterCurveDerivedValues.bypassWaterMl?.let { StatChip(text = "旁路 ${formatNumber(it)}ml") }
+                        waterCurveDerivedValues.brewDurationSeconds?.let { StatChip(text = "时长 ${it}s") }
+                        normalizedGrindValue?.let { StatChip(text = "归一化 ${formatNormalizedGrind(it)}") }
+                    }
+                }
                 WaterCurveEditor(
                     temperatureMode = uiState.objective.waterCurveTemperatureMode,
                     onTemperatureModeChange = onWaterCurveTemperatureModeChange,

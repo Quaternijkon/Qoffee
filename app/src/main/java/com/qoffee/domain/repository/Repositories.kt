@@ -11,8 +11,11 @@ import com.qoffee.core.model.BrewSession
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.Experiment
+import com.qoffee.core.model.ExperimentProject
+import com.qoffee.core.model.ExperimentProjectDraft
 import com.qoffee.core.model.ExperimentRun
 import com.qoffee.core.model.FlavorTag
+import com.qoffee.core.model.GuideTemplate
 import com.qoffee.core.model.GlossaryTerm
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.LearningTrack
@@ -109,8 +112,11 @@ interface PreferenceRepository {
 interface SessionRepository {
     fun observeActiveSession(): Flow<BrewSession?>
     suspend fun startSession(method: BrewMethod, practiceBlockId: String? = null): BrewSession
+    suspend fun startGuideSession(guideId: Long): BrewSession
     suspend fun moveToNextStage()
     suspend fun moveToPreviousStage()
+    suspend fun pauseActiveSession()
+    suspend fun resumeActiveSession()
     suspend fun finishActiveSession()
     suspend fun discardActiveSession()
 }
@@ -128,6 +134,18 @@ interface ExperimentRepository {
     fun observeExperiments(): Flow<List<Experiment>>
     fun observeExperimentRuns(): Flow<List<ExperimentRun>>
     fun observeBeanInventory(): Flow<List<BeanInventory>>
+    fun observeProjects(): Flow<List<ExperimentProject>>
+    fun observeProject(projectId: Long): Flow<ExperimentProject?>
+    suspend fun createProject(draft: ExperimentProjectDraft): Long
+    suspend fun createOrOpenCellDraft(projectId: Long, cellId: String): Long
+}
+
+interface GuideRepository {
+    fun observeGuides(): Flow<List<GuideTemplate>>
+    fun observeGuide(guideId: Long): Flow<GuideTemplate?>
+    suspend fun getGuide(guideId: Long): GuideTemplate?
+    suspend fun createGuideFromRecord(recordId: Long): Long
+    suspend fun seedBuiltInGuides()
 }
 
 interface EntitlementRepository {

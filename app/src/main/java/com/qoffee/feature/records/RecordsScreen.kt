@@ -215,9 +215,11 @@ fun RecordsRoute(
     currentArchive: ArchiveSummary?,
     isReadOnlyArchive: Boolean,
     onOpenDetail: (Long) -> Unit,
-    onOpenSession: (BrewMethod) -> Unit,
+    onOpenSession: (BrewMethod, Long?) -> Unit,
     onOpenEditor: (Long?, Long?, RecordEditorEntry, Long?, Long?) -> Unit,
     onOpenAnalysis: () -> Unit,
+    onOpenExperiments: () -> Unit,
+    onOpenGuides: () -> Unit,
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -230,6 +232,8 @@ fun RecordsRoute(
         onOpenSession = onOpenSession,
         onOpenEditor = onOpenEditor,
         onOpenAnalysis = onOpenAnalysis,
+        onOpenExperiments = onOpenExperiments,
+        onOpenGuides = onOpenGuides,
     )
 }
 
@@ -241,9 +245,11 @@ private fun RecordsScreen(
     uiState: RecordsHubUiState,
     isReadOnlyArchive: Boolean,
     onOpenDetail: (Long) -> Unit,
-    onOpenSession: (BrewMethod) -> Unit,
+    onOpenSession: (BrewMethod, Long?) -> Unit,
     onOpenEditor: (Long?, Long?, RecordEditorEntry, Long?, Long?) -> Unit,
     onOpenAnalysis: () -> Unit,
+    onOpenExperiments: () -> Unit,
+    onOpenGuides: () -> Unit,
 ) {
     var pendingAction by remember { mutableStateOf<PendingDraftAction?>(null) }
 
@@ -311,10 +317,10 @@ private fun RecordsScreen(
                 title = "继续会话",
             ) {
                 FeatureEntryCard(
-                    title = "继续 ${session.method.displayName} 会话",
+                    title = session.title,
                     hint = session.currentStage?.title ?: "继续当前练习",
                     icon = Icons.Outlined.PlayArrow,
-                    onClick = { onOpenSession(session.method) },
+                    onClick = { onOpenSession(session.method, session.sourceGuideId) },
                     badge = "SESSION",
                     selected = true,
                 )
@@ -350,10 +356,30 @@ private fun RecordsScreen(
                     title = "开始冲煮",
                     hint = "主动会话",
                     icon = Icons.Outlined.PlayArrow,
-                    onClick = { onOpenSession(BrewMethod.POUR_OVER) },
+                    onClick = { onOpenSession(BrewMethod.POUR_OVER, null) },
                     modifier = Modifier.weight(1f),
                     badge = "LIVE",
                     selected = true,
+                )
+                FeatureEntryCard(
+                    title = "实验工作台",
+                    hint = "控制变量实验",
+                    icon = Icons.Outlined.FolderCopy,
+                    onClick = onOpenExperiments,
+                    modifier = Modifier.weight(1f),
+                    badge = "LAB",
+                    enabled = !isReadOnlyArchive,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FeatureEntryCard(
+                    title = "指导库",
+                    hint = "先预览，再开始",
+                    icon = Icons.Outlined.PlayArrow,
+                    onClick = onOpenGuides,
+                    modifier = Modifier.weight(1f),
+                    badge = "GUIDE",
+                    enabled = !isReadOnlyArchive,
                 )
                 FeatureEntryCard(
                     title = "常用配方",
@@ -380,7 +406,7 @@ private fun RecordsScreen(
                         title = block.title,
                         hint = "${block.sessionTarget} 次 · ${block.level.displayName}",
                         icon = Icons.Outlined.PlayArrow,
-                        onClick = { onOpenSession(block.method ?: BrewMethod.POUR_OVER) },
+                        onClick = { onOpenSession(block.method ?: BrewMethod.POUR_OVER, null) },
                         badge = if (block.proOnly) "PRO" else "PLAN",
                     )
                 }

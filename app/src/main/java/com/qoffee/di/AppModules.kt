@@ -28,6 +28,7 @@ import com.qoffee.data.repository.RecordRepositoryImpl
 import com.qoffee.data.repository.SessionRepositoryImpl
 import com.qoffee.data.repository.LearningRepositoryImpl
 import com.qoffee.data.repository.ExperimentRepositoryFacade
+import com.qoffee.data.repository.GuideRepositoryImpl
 import com.qoffee.data.repository.EntitlementRepositoryImpl
 import com.qoffee.data.repository.ShareRepositoryImpl
 import com.qoffee.domain.repository.ArchiveRepository
@@ -36,6 +37,7 @@ import com.qoffee.domain.repository.BackupRepository
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.EntitlementRepository
 import com.qoffee.domain.repository.ExperimentRepository
+import com.qoffee.domain.repository.GuideRepository
 import com.qoffee.domain.repository.LearningRepository
 import com.qoffee.domain.repository.PreferenceRepository
 import com.qoffee.domain.repository.RecipeRepository
@@ -67,6 +69,7 @@ object DatabaseModule {
             QoffeeDatabaseMigrations.MIGRATION_4_5,
             QoffeeDatabaseMigrations.MIGRATION_5_6,
             QoffeeDatabaseMigrations.MIGRATION_6_7,
+            QoffeeDatabaseMigrations.MIGRATION_7_8,
         )
             .fallbackToDestructiveMigration(false)
             .build()
@@ -153,6 +156,10 @@ abstract class BindingsModule {
     @Binds
     @Singleton
     abstract fun bindExperimentRepository(impl: ExperimentRepositoryFacade): ExperimentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindGuideRepository(impl: GuideRepositoryImpl): GuideRepository
 
     @Binds
     @Singleton

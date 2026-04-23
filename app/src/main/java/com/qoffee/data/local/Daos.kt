@@ -81,6 +81,9 @@ interface GrinderProfileDao {
     @Query("SELECT * FROM grinder_profiles WHERE archiveId = :archiveId")
     suspend fun getAllByArchive(archiveId: Long): List<GrinderProfileEntity>
 
+    @Query("SELECT id FROM grinder_profiles WHERE archiveId = :archiveId")
+    suspend fun getIdsByArchive(archiveId: Long): List<Long>
+
     @Query("SELECT * FROM grinder_profiles WHERE id = :id")
     suspend fun getById(id: Long): GrinderProfileEntity?
 

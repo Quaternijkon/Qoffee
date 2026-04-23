@@ -355,6 +355,7 @@ class AnalysisViewModel @Inject constructor(
 fun AnalysisRoute(
     paddingValues: PaddingValues,
     onOpenRecord: (Long, String?) -> Unit,
+    onOpenExperimentProject: (Long) -> Unit,
     viewModel: AnalysisViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -403,6 +404,7 @@ fun AnalysisRoute(
             onOpenRecord = { recordId ->
                 onOpenRecord(recordId, buildReviewContext(uiState))
             },
+            onOpenExperimentProject = onOpenExperimentProject,
             onExportCsv = {
                 coroutineScope.launch {
                     val payload = viewModel.prepareCsvExport() ?: return@launch
@@ -435,6 +437,7 @@ private fun AnalysisScreen(
     onSectionChange: (HistorySection) -> Unit,
     onResetFilters: () -> Unit,
     onOpenRecord: (Long) -> Unit,
+    onOpenExperimentProject: (Long) -> Unit,
     onExportCsv: () -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -539,6 +542,7 @@ private fun AnalysisScreen(
                 experimentItems(
                     uiState = uiState,
                     onOpenRecord = onOpenRecord,
+                    onOpenExperimentProject = onOpenExperimentProject,
                 )
             }
         }
@@ -771,6 +775,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.sampleItems(
 private fun androidx.compose.foundation.lazy.LazyListScope.experimentItems(
     uiState: ReviewUiState,
     onOpenRecord: (Long) -> Unit,
+    onOpenExperimentProject: (Long) -> Unit,
 ) {
     item {
         SectionCard(title = "实验工作台", subtitle = "保留最相关的实验线索，但不和主复盘抢焦点。") {
@@ -793,6 +798,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.experimentItems(
                         title = experiment.title,
                         subtitle = experiment.status.displayName,
                         badge = experiment.comparedParameter?.displayName,
+                        onClick = experiment.id.removePrefix("project-").toLongOrNull()?.let { projectId ->
+                            { onOpenExperimentProject(projectId) }
+                        },
                     )
                 }
                 uiState.experimentRuns.take(3).forEach { run ->
