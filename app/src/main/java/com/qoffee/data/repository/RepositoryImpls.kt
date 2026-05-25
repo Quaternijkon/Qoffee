@@ -7,12 +7,15 @@ import androidx.room.withTransaction
 import com.qoffee.core.analytics.AnalyticsEngine
 import com.qoffee.core.common.TimeProvider
 import com.qoffee.core.model.AnalyticsDashboard
+import com.qoffee.core.model.AnalyticsReport
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
+import com.qoffee.core.model.AppThemeStyle
 import com.qoffee.core.model.BeanProfile
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.DraftReplacePolicy
+import com.qoffee.core.model.FileExportPayload
 import com.qoffee.core.model.FlavorTag
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.ObjectiveDraftUpdate
@@ -20,6 +23,7 @@ import com.qoffee.core.model.RecordPrefillSource
 import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RecordValidationResult
+import com.qoffee.core.model.ServerEnvironment
 import com.qoffee.core.model.SubjectiveEvaluation
 import com.qoffee.core.model.UserSettings
 import com.qoffee.core.model.WaterCurve
@@ -611,16 +615,6 @@ class RecordRepositoryImpl @Inject constructor(
                 updatedAt = now,
             ),
         )
-        source.subjectiveEvaluation?.let { evaluationWithTags ->
-            subjectiveEvaluationDao.upsert(
-                evaluationWithTags.evaluation.copy(recordId = newId),
-            )
-            recordFlavorTagDao.insertAll(
-                evaluationWithTags.flavorTags.map { tag ->
-                    RecordFlavorTagCrossRef(recordId = newId, flavorTagId = tag.id)
-                },
-            )
-        }
         return newId
     }
 
@@ -800,6 +794,34 @@ class AnalyticsRepositoryImpl @Inject constructor(
                 } ?: flowOf(AnalyticsDashboard(filter = filter))
             }
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeReport(filter: AnalysisFilter): Flow<AnalyticsReport> {
+        return dataStore.data
+            .map { prefs -> prefs[PreferenceKeys.CURRENT_ARCHIVE_ID] }
+            .flatMapLatest { currentArchiveId ->
+                val effectiveArchiveId = filter.archiveId ?: currentArchiveId
+                effectiveArchiveId?.let {
+                    brewRecordDao.observeAll(it).map { rows ->
+                        analyticsEngine.buildReport(rows.map { row -> row.toDomain() }, filter.copy(archiveId = it))
+                    }
+                } ?: flowOf(analyticsEngine.buildReport(emptyList(), filter))
+            }
+    }
+
+    override suspend fun exportReportMarkdown(filter: AnalysisFilter): FileExportPayload {
+        val archiveId = filter.archiveId ?: requireCurrentArchiveId()
+        val effectiveFilter = filter.copy(archiveId = archiveId)
+        val report = analyticsEngine.buildReport(
+            records = brewRecordDao.getAllByArchive(archiveId).map { row -> row.toDomain() },
+            filter = effectiveFilter,
+        )
+        return AnalyticsMarkdownExporter.export(report)
+    }
+
+    private suspend fun requireCurrentArchiveId(): Long {
+        return checkNotNull(dataStore.data.first()[PreferenceKeys.CURRENT_ARCHIVE_ID]) { "当前没有活动存档。" }
+    }
 }
 
 @Singleton
@@ -813,6 +835,12 @@ class PreferenceRepositoryImpl @Inject constructor(
                 autoRestoreDraft = prefs[PreferenceKeys.AUTO_RESTORE_DRAFT] ?: true,
                 showInsightConfidence = prefs[PreferenceKeys.SHOW_CONFIDENCE] ?: true,
                 showLearnInDock = prefs[PreferenceKeys.SHOW_LEARN_IN_DOCK] ?: false,
+                themeStyle = AppThemeStyle.entries.firstOrNull {
+                    it.name == prefs[PreferenceKeys.THEME_STYLE]
+                } ?: AppThemeStyle.CLASSIC,
+                serverEnvironment = ServerEnvironment.entries.firstOrNull {
+                    it.name == prefs[PreferenceKeys.SERVER_ENVIRONMENT]
+                } ?: ServerEnvironment.TEST,
                 defaultAnalysisTimeRange = AnalysisTimeRange.entries.firstOrNull {
                     it.name == prefs[PreferenceKeys.DEFAULT_ANALYSIS_RANGE]
                 } ?: AnalysisTimeRange.LAST_90_DAYS,
@@ -856,5 +884,35 @@ class PreferenceRepositoryImpl @Inject constructor(
 
     override suspend fun setShowLearnInDock(enabled: Boolean) {
         dataStore.edit { prefs -> prefs[PreferenceKeys.SHOW_LEARN_IN_DOCK] = enabled }
+    }
+
+    override suspend fun setThemeStyle(style: AppThemeStyle) {
+        dataStore.edit { prefs -> prefs[PreferenceKeys.THEME_STYLE] = style.name }
+    }
+
+    override suspend fun setServerEnvironment(environment: ServerEnvironment) {
+        dataStore.edit { prefs ->
+            val current = ServerEnvironment.entries.firstOrNull {
+                it.name == prefs[PreferenceKeys.SERVER_ENVIRONMENT]
+            } ?: ServerEnvironment.TEST
+            if (current == environment) {
+                return@edit
+            }
+            prefs[PreferenceKeys.SERVER_ENVIRONMENT] = environment.name
+            prefs.remove(PreferenceKeys.SYNC_EMAIL)
+            prefs.remove(PreferenceKeys.SYNC_SIGNED_IN_AT)
+            prefs.remove(PreferenceKeys.SYNC_DEVICE_ID)
+            prefs.remove(PreferenceKeys.SYNC_ACCESS_TOKEN)
+            prefs.remove(PreferenceKeys.SYNC_REFRESH_TOKEN)
+            prefs.remove(PreferenceKeys.SYNC_ACCESS_EXPIRES_AT)
+            prefs.remove(PreferenceKeys.SYNC_CHANGE_CURSOR)
+            prefs.remove(PreferenceKeys.SYNC_LAST_PUSHED_AT)
+            prefs.remove(PreferenceKeys.SYNC_LAST_PULLED_AT)
+            prefs.remove(PreferenceKeys.SYNC_LAST_SNAPSHOT_ID)
+            prefs.remove(PreferenceKeys.SYNC_LAST_SNAPSHOT_AT)
+            prefs.remove(PreferenceKeys.SYNC_LAST_SNAPSHOT_CHECKSUM)
+            prefs.remove(PreferenceKeys.SYNC_LAST_SNAPSHOT_BYTES)
+            prefs[PreferenceKeys.SYNC_LAST_MESSAGE] = "已切换至${environment.displayName}环境，请重新登录云同步。"
+        }
     }
 }

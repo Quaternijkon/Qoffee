@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.FlavorTag
+import com.qoffee.core.model.AppThemeStyle
 import com.qoffee.core.model.PourStage
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RestoreStatus
@@ -44,6 +45,7 @@ class BackupRepositoryHelpersTest {
                 defaultBeanProfileId = 10L,
                 defaultGrinderProfileId = 20L,
                 showLearnInDock = false,
+                themeStyle = AppThemeStyle.MINIMAL.name,
             ),
             archives = listOf(
                 BackupArchive(
@@ -159,6 +161,7 @@ class BackupRepositoryHelpersTest {
         val decoded = BackupJsonCodec.decode(BackupJsonCodec.encode(snapshot))
 
         assertThat(decoded.preferences.defaultAnalysisTimeRange).isEqualTo("ALL")
+        assertThat(decoded.preferences.themeStyle).isEqualTo(AppThemeStyle.MINIMAL.name)
         assertThat(decoded.archives).hasSize(1)
         assertThat(decoded.archives.first().recipes.first().waterCurveJson).isEqualTo(waterCurveJson)
         assertThat(decoded.archives.first().records.first().record.brewDurationSeconds).isEqualTo(165)

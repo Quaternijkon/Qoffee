@@ -13,6 +13,8 @@ import com.qoffee.core.model.ObjectiveSnapshot
 import com.qoffee.core.model.PourStage
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.WaitStage
+import com.qoffee.core.model.formatWaterCurveDuration
+import com.qoffee.core.model.formatWaterCurveNumber
 import com.qoffee.core.model.toObjectiveSnapshot
 import com.qoffee.data.local.CollectionEntity
 import com.qoffee.data.local.QoffeeDatabase
@@ -76,7 +78,7 @@ class GuideRepositoryImpl @Inject constructor(
             sourceRecordId = record.id,
             isBuiltIn = false,
             objective = record.toObjectiveSnapshot(),
-            stages = buildStagesFromRecord(record),
+            stages = buildGuideStagesFromRecord(record),
             createdAt = now,
             updatedAt = now,
         )
@@ -250,47 +252,6 @@ class GuideRepositoryImpl @Inject constructor(
         return "$bean 指导"
     }
 
-    private fun buildStagesFromRecord(record: CoffeeRecord): List<GuideStageCard> {
-        val curve = record.waterCurve
-        if (curve != null) {
-            return curve.stages.mapIndexed { index, stage ->
-                when (stage) {
-                    is PourStage -> GuideStageCard(
-                        id = "stage-$index",
-                        title = if (index == 0) "开始注水" else "继续注水",
-                        instruction = "在 ${stage.endTimeSeconds} 秒前把累计注水量带到 ${stage.cumulativeWaterMl}ml。",
-                        targetDurationSeconds = stage.endTimeSeconds,
-                        targetValueLabel = "${stage.cumulativeWaterMl}ml",
-                        tip = stage.quickTemperatureC?.let { "参考水温 ${it.toInt()}°C" }.orEmpty(),
-                    )
-
-                    is WaitStage -> GuideStageCard(
-                        id = "stage-$index",
-                        title = "等待",
-                        instruction = "保持当前状态，等待到 ${stage.endTimeSeconds} 秒。",
-                        targetDurationSeconds = stage.endTimeSeconds,
-                        targetValueLabel = "等待",
-                        tip = "观察液面与粉床状态。",
-                    )
-
-                    is BypassStage -> GuideStageCard(
-                        id = "stage-$index",
-                        title = "旁路加水",
-                        instruction = "加入 ${stage.waterMl}ml 旁路水并轻轻混匀。",
-                        targetDurationSeconds = 20,
-                        targetValueLabel = "${stage.waterMl}ml",
-                        tip = "记录稀释后的口感变化。",
-                    )
-                }
-            }
-        }
-        return listOf(
-            GuideStageCard("prep", "准备", "准备器具、称粉并确认冲煮参数。", 45, "准备完成", "让器具和参数先稳定。"),
-            GuideStageCard("brew", "冲煮", "按照当前记录的参数完成本次冲煮。", 90, "按记录执行", "侧重观察主观变化。"),
-            GuideStageCard("finish", "收尾", "记录评分、风味标签和主观笔记。", 35, "完成记录", "先记第一印象再回看参数。"),
-        )
-    }
-
     private fun currentArchiveIdFlow(): Flow<Long?> = dataStore.data.map { prefs ->
         prefs[PreferenceKeys.CURRENT_ARCHIVE_ID]
     }
@@ -298,4 +259,62 @@ class GuideRepositoryImpl @Inject constructor(
     private suspend fun requireCurrentArchiveId(): Long {
         return checkNotNull(dataStore.data.first()[PreferenceKeys.CURRENT_ARCHIVE_ID]) { "当前没有活动存档。" }
     }
+}
+
+internal fun buildGuideStagesFromRecord(record: CoffeeRecord): List<GuideStageCard> {
+    val curve = record.waterCurve
+    if (curve != null) {
+        var previousTimedEndSeconds = 0
+        var previousPourWaterMl = 0.0
+        return curve.stages.mapIndexed { index, stage ->
+            when (stage) {
+                is PourStage -> {
+                    val stageDurationSeconds = (stage.endTimeSeconds - previousTimedEndSeconds).coerceAtLeast(1)
+                    val stageWaterMl = (stage.cumulativeWaterMl - previousPourWaterMl).coerceAtLeast(0.0)
+                    val startLabel = formatWaterCurveDuration(previousTimedEndSeconds)
+                    val endLabel = formatWaterCurveDuration(stage.endTimeSeconds)
+                    val isFirstPour = previousPourWaterMl <= 0.0
+                    previousTimedEndSeconds = stage.endTimeSeconds
+                    previousPourWaterMl = stage.cumulativeWaterMl
+                    GuideStageCard(
+                        id = "stage-$index",
+                        title = if (isFirstPour) "开始注水" else "继续注水",
+                        instruction = "从 $startLabel 到 $endLabel，本阶段注水约 ${formatWaterCurveNumber(stageWaterMl)}ml，累计到 ${formatWaterCurveNumber(stage.cumulativeWaterMl)}ml。",
+                        targetDurationSeconds = stageDurationSeconds,
+                        targetValueLabel = "本段 ${formatWaterCurveNumber(stageWaterMl)}ml · 累计 ${formatWaterCurveNumber(stage.cumulativeWaterMl)}ml",
+                        tip = stage.quickTemperatureC?.let { "参考水温 ${formatWaterCurveNumber(it)}°C" }.orEmpty(),
+                    )
+                }
+
+                is WaitStage -> {
+                    val stageDurationSeconds = (stage.endTimeSeconds - previousTimedEndSeconds).coerceAtLeast(1)
+                    val startLabel = formatWaterCurveDuration(previousTimedEndSeconds)
+                    val endLabel = formatWaterCurveDuration(stage.endTimeSeconds)
+                    previousTimedEndSeconds = stage.endTimeSeconds
+                    GuideStageCard(
+                        id = "stage-$index",
+                        title = "等待",
+                        instruction = "从 $startLabel 等待到 $endLabel，保持当前状态并观察液面与粉床。",
+                        targetDurationSeconds = stageDurationSeconds,
+                        targetValueLabel = "等待 ${formatWaterCurveDuration(stageDurationSeconds)}",
+                        tip = "时间到后进入下一阶段。",
+                    )
+                }
+
+                is BypassStage -> GuideStageCard(
+                    id = "stage-$index",
+                    title = "旁路加水",
+                    instruction = "加入 ${formatWaterCurveNumber(stage.waterMl)}ml 旁路水并轻轻混匀。",
+                    targetDurationSeconds = 20,
+                    targetValueLabel = "旁路 ${formatWaterCurveNumber(stage.waterMl)}ml",
+                    tip = stage.quickTemperatureC?.let { "参考水温 ${formatWaterCurveNumber(it)}°C" } ?: "记录稀释后的口感变化。",
+                )
+            }
+        }
+    }
+    return listOf(
+        GuideStageCard("prep", "准备", "准备器具、称粉并确认冲煮参数。", 45, "准备完成", "让器具和参数先稳定。"),
+        GuideStageCard("brew", "冲煮", "按照当前记录的参数完成本次冲煮。", 90, "按记录执行", "侧重观察主观变化。"),
+        GuideStageCard("finish", "收尾", "记录评分、风味标签和主观笔记。", 35, "完成记录", "先记第一印象再回看参数。"),
+    )
 }

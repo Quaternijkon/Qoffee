@@ -39,8 +39,13 @@ import androidx.room.RoomDatabase
         InventoryTransactionEntity::class,
         AttachmentEntity::class,
         ImportLogEntity::class,
+        SyncEntityMapEntity::class,
+        SyncOutboxEntity::class,
+        SyncTombstoneEntity::class,
+        SyncCursorEntity::class,
+        SyncConflictCacheEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class QoffeeDatabase : RoomDatabase() {
@@ -78,4 +83,5 @@ abstract class QoffeeDatabase : RoomDatabase() {
     abstract fun inventoryTransactionDao(): InventoryTransactionDao
     abstract fun attachmentDao(): AttachmentDao
     abstract fun importLogDao(): ImportLogDao
+    abstract fun syncMetadataDao(): SyncMetadataDao
 }

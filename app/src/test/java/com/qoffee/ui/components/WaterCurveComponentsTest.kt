@@ -73,4 +73,69 @@ class WaterCurveComponentsTest {
     fun durationFormattingSupportsLongColdBrewDurations() {
         assertThat(formatDurationValue(12 * 3600)).isEqualTo("12:00:00")
     }
+
+    @Test
+    fun wheelNumericInputSnapsAndPreservesOptionalEmptyValue() {
+        assertThat(
+            normalizeWheelNumericValue(
+                raw = "17",
+                minValue = 5.0,
+                maxValue = 1200.0,
+                step = 5.0,
+                decimals = 0,
+                allowEmpty = false,
+            ),
+        ).isEqualTo("15")
+
+        assertThat(
+            normalizeWheelNumericValue(
+                raw = "",
+                minValue = 0.0,
+                maxValue = 100.0,
+                step = 1.0,
+                decimals = 0,
+                allowEmpty = true,
+            ),
+        ).isEmpty()
+
+        assertThat(
+            normalizeWheelNumericValue(
+                raw = "",
+                minValue = 5.0,
+                maxValue = 7200.0,
+                step = 5.0,
+                decimals = 0,
+                allowEmpty = false,
+            ),
+        ).isEqualTo("5")
+    }
+
+    @Test
+    fun wheelIndexUsesSnappedValueWithinBounds() {
+        assertThat(wheelIndexForValue(value = 17.0, minValue = 5.0, maxValue = 1200.0, step = 5.0)).isEqualTo(2)
+        assertThat(wheelIndexForValue(value = 9999.0, minValue = 5.0, maxValue = 20.0, step = 5.0)).isEqualTo(3)
+    }
+
+    @Test
+    fun durationWheelCompositionClampsAndSnapsSplitTimeValues() {
+        assertThat(
+            composeDurationWheelSeconds(
+                hours = 1,
+                minutes = 2,
+                seconds = 17,
+                minSeconds = 5,
+                maxSeconds = 7200,
+                secondStep = 5,
+            ),
+        ).isEqualTo(3735)
+
+        assertThat(
+            normalizeDurationWheelValue(
+                valueSeconds = null,
+                minSeconds = 5,
+                maxSeconds = 7200,
+                secondStep = 5,
+            ),
+        ).isEqualTo(5)
+    }
 }

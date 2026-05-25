@@ -26,8 +26,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -106,23 +112,24 @@ fun SectionCard(
     subtitle: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val dashboardColors = QoffeeDashboardTheme.colors
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                color = dashboardColors.panel.copy(alpha = 0.18f),
-                shape = MaterialTheme.shapes.large,
-            )
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.animateContentSize(animationSpec = spring(stiffness = 420f)),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .animateContentSize(animationSpec = spring(stiffness = 420f))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             content = {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 if (!subtitle.isNullOrBlank()) {
@@ -303,7 +310,8 @@ fun BeanIdentityCard(
 }
 
 @Composable
-fun <T> DropdownField(
+@OptIn(ExperimentalMaterial3Api::class)
+fun <T> QoffeeSelectField(
     label: String,
     selectedLabel: String?,
     options: List<DropdownOption<T>>,
@@ -313,51 +321,24 @@ fun <T> DropdownField(
     allowClear: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val shape = MaterialTheme.shapes.medium
-    val interactionSource = remember { MutableInteractionSource() }
-    Box(modifier = modifier.fillMaxWidth()) {
-        Surface(
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = selectedLabel.orEmpty(),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            placeholder = { Text(placeholder) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = { expanded = true },
-                ),
-            color = QoffeeDashboardTheme.colors.panelMuted,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shape = shape,
-            border = BorderStroke(1.dp, QoffeeDashboardTheme.colors.panelStroke),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = selectedLabel ?: placeholder,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (selectedLabel == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                Text(
-                    text = "▾",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        DropdownMenu(
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true)
+                .fillMaxWidth(),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+        )
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
@@ -381,6 +362,27 @@ fun <T> DropdownField(
             }
         }
     }
+}
+
+@Composable
+fun <T> DropdownField(
+    label: String,
+    selectedLabel: String?,
+    options: List<DropdownOption<T>>,
+    onSelected: (T?) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "请选择",
+    allowClear: Boolean = true,
+) {
+    QoffeeSelectField(
+        label = label,
+        selectedLabel = selectedLabel,
+        options = options,
+        onSelected = onSelected,
+        modifier = modifier,
+        placeholder = placeholder,
+        allowClear = allowClear,
+    )
 }
 
 private enum class RatingGlyph {
@@ -689,7 +691,7 @@ fun StatChip(
         border = BorderStroke(1.dp, dashboardColors.panelStroke),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -725,8 +727,8 @@ fun LabeledValue(
         border = BorderStroke(1.dp, dashboardColors.panelStroke),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
                 text = label,

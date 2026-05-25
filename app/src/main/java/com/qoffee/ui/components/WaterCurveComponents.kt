@@ -1,9 +1,13 @@
 package com.qoffee.ui.components
 
 import android.graphics.Paint
+import android.widget.LinearLayout
+import android.widget.NumberPicker
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,11 +16,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -24,8 +31,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,8 +48,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.qoffee.core.model.BrewMethod
 import com.qoffee.core.model.BypassStage
 import com.qoffee.core.model.PourStage
@@ -56,8 +67,10 @@ import com.qoffee.core.model.formatWaterCurveDuration
 import com.qoffee.core.model.formatWaterCurveNumber
 import com.qoffee.core.model.stageSummaryLines
 import com.qoffee.core.model.validate
+import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 enum class WaterCurveStageKind(val displayName: String) {
     POUR("注水"),
@@ -369,231 +382,285 @@ private fun WaterCurveStageRow(
     onRemoveStage: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var showEditor by remember { mutableStateOf(false) }
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
+        onClick = { showEditor = true },
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "${index + 1}. ${stage.kind.displayName}",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.widthIn(min = 46.dp),
-                    maxLines = 1,
-                )
-                Text(
-                    text = stageSummary(stage, temperatureMode),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
+            Text(
+                text = "${index + 1}. ${stage.kind.displayName}",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.widthIn(min = 46.dp),
+                maxLines = 1,
+            )
+            Text(
+                text = stageSummary(stage, temperatureMode),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
 
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "更多",
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(if (stage.showAdvancedTemperature) "收起高级温度" else "高级温度") },
-                            onClick = {
-                                menuExpanded = false
-                                onStageChange(stage.copy(showAdvancedTemperature = !stage.showAdvancedTemperature))
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("上移") },
-                            onClick = {
-                                menuExpanded = false
-                                onMoveStageUp()
-                            },
-                            enabled = !isFirst,
-                        )
-                        DropdownMenuItem(
-                            text = { Text("下移") },
-                            onClick = {
-                                menuExpanded = false
-                                onMoveStageDown()
-                            },
-                            enabled = !isLast,
-                        )
-                        DropdownMenuItem(
-                            text = { Text("删除") },
-                            onClick = {
-                                menuExpanded = false
-                                onRemoveStage()
-                            },
-                        )
-                    }
-                }
-            }
-
-            when (stage.kind) {
-                WaterCurveStageKind.POUR -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        InlineRulerField(
-                            label = "到达时间",
-                            value = stage.endTimeSeconds?.toString().orEmpty(),
-                            onValueChange = { next -> onStageChange(stage.copy(endTimeSeconds = next.toIntOrNull())) },
-                            minValue = 0.0,
-                            maxValue = 7200.0,
-                            step = 5.0,
-                            decimals = 0,
-                            unit = "s",
-                            modifier = Modifier.weight(1f),
-                        )
-                        InlineRulerField(
-                            label = "累计注水",
-                            value = stage.cumulativeWaterText,
-                            onValueChange = { onStageChange(stage.copy(cumulativeWaterText = it)) },
-                            minValue = 0.0,
-                            maxValue = 1200.0,
-                            step = 5.0,
-                            decimals = 0,
-                            unit = "ml",
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    InlineRulerField(
-                        label = quickTemperatureShortLabel(temperatureMode),
-                        value = stage.quickTemperatureText,
-                        onValueChange = { onStageChange(stage.copy(quickTemperatureText = it)) },
-                        minValue = 0.0,
-                        maxValue = 100.0,
-                        step = 1.0,
-                        decimals = 0,
-                        unit = "°C",
-                        modifier = Modifier.fillMaxWidth(),
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "更多",
                     )
                 }
-
-                WaterCurveStageKind.WAIT -> {
-                    InlineRulerField(
-                        label = "等待到",
-                        value = stage.endTimeSeconds?.toString().orEmpty(),
-                        onValueChange = { next -> onStageChange(stage.copy(endTimeSeconds = next.toIntOrNull())) },
-                        minValue = 0.0,
-                        maxValue = 43200.0,
-                        step = 5.0,
-                        decimals = 0,
-                        unit = "s",
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                WaterCurveStageKind.BYPASS -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        InlineRulerField(
-                            label = "旁路水量",
-                            value = stage.waterText,
-                            onValueChange = { onStageChange(stage.copy(waterText = it)) },
-                            minValue = 0.0,
-                            maxValue = 1000.0,
-                            step = 5.0,
-                            decimals = 0,
-                            unit = "ml",
-                            modifier = Modifier.weight(1f),
-                        )
-                        InlineRulerField(
-                            label = quickTemperatureShortLabel(temperatureMode),
-                            value = stage.quickTemperatureText,
-                            onValueChange = { onStageChange(stage.copy(quickTemperatureText = it)) },
-                            minValue = 0.0,
-                            maxValue = 100.0,
-                            step = 1.0,
-                            decimals = 0,
-                            unit = "°C",
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-
-            AnimatedVisibility(visible = stage.showAdvancedTemperature) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        InlineRulerField(
-                            label = "起始温度",
-                            value = stage.startTempText,
-                            onValueChange = { onStageChange(stage.copy(startTempText = it)) },
-                            minValue = 0.0,
-                            maxValue = 100.0,
-                            step = 1.0,
-                            decimals = 0,
-                            unit = "°C",
-                            modifier = Modifier.weight(1f),
-                        )
-                        InlineRulerField(
-                            label = "结束温度",
-                            value = stage.endTempText,
-                            onValueChange = { onStageChange(stage.copy(endTempText = it)) },
-                            minValue = 0.0,
-                            maxValue = 100.0,
-                            step = 1.0,
-                            decimals = 0,
-                            unit = "°C",
-                            modifier = Modifier.weight(1f),
-                        )
+                    DropdownMenuItem(
+                        text = { Text("编辑") },
+                        onClick = {
+                            menuExpanded = false
+                            showEditor = true
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (stage.showAdvancedTemperature) "收起高级温度" else "高级温度") },
+                        onClick = {
+                            menuExpanded = false
+                            onStageChange(stage.copy(showAdvancedTemperature = !stage.showAdvancedTemperature))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("上移") },
+                        onClick = {
+                            menuExpanded = false
+                            onMoveStageUp()
+                        },
+                        enabled = !isFirst,
+                    )
+                    DropdownMenuItem(
+                        text = { Text("下移") },
+                        onClick = {
+                            menuExpanded = false
+                            onMoveStageDown()
+                        },
+                        enabled = !isLast,
+                    )
+                    DropdownMenuItem(
+                        text = { Text("删除") },
+                        onClick = {
+                            menuExpanded = false
+                            onRemoveStage()
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    if (showEditor) {
+        WaterCurveStageEditorDialog(
+            index = index,
+            stage = stage,
+            temperatureMode = temperatureMode,
+            onDismiss = { showEditor = false },
+            onConfirm = {
+                onStageChange(it)
+                showEditor = false
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WaterCurveStageEditorDialog(
+    index: Int,
+    stage: WaterCurveStageEditorState,
+    temperatureMode: WaterCurveTemperatureMode,
+    onDismiss: () -> Unit,
+    onConfirm: (WaterCurveStageEditorState) -> Unit,
+) {
+    var draft by remember(stage) { mutableStateOf(stage) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑第 ${index + 1} 段 · ${stage.kind.displayName}") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    buildStageSummaryTokens(draft, temperatureMode).forEach { token ->
+                        StatChip(text = token)
                     }
-                    if (stage.kind == WaterCurveStageKind.WAIT) {
+                }
+
+                when (draft.kind) {
+                    WaterCurveStageKind.POUR -> {
+                        DurationWheelField(
+                            label = "到达时间",
+                            valueSeconds = draft.endTimeSeconds,
+                            onValueChange = { next -> draft = draft.copy(endTimeSeconds = next) },
+                            maxSeconds = 7200,
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            InlineRulerField(
-                                label = "环境起始",
-                                value = stage.ambientStartTempText,
-                                onValueChange = { onStageChange(stage.copy(ambientStartTempText = it)) },
+                            StageWheelField(
+                                label = "累积注水",
+                                value = draft.cumulativeWaterText,
+                                onValueChange = { draft = draft.copy(cumulativeWaterText = it) },
+                                minValue = 5.0,
+                                maxValue = 1200.0,
+                                step = 5.0,
+                                unit = "ml",
+                                allowEmpty = false,
+                                modifier = Modifier.weight(1f),
+                            )
+                            StageWheelField(
+                                label = quickTemperatureShortLabel(temperatureMode),
+                                value = draft.quickTemperatureText,
+                                onValueChange = { draft = draft.copy(quickTemperatureText = it) },
                                 minValue = 0.0,
                                 maxValue = 100.0,
                                 step = 1.0,
-                                decimals = 0,
                                 unit = "°C",
                                 modifier = Modifier.weight(1f),
                             )
-                            InlineRulerField(
-                                label = "环境结束",
-                                value = stage.ambientEndTempText,
-                                onValueChange = { onStageChange(stage.copy(ambientEndTempText = it)) },
+                        }
+                    }
+
+                    WaterCurveStageKind.WAIT -> {
+                        DurationWheelField(
+                            label = "等待到",
+                            valueSeconds = draft.endTimeSeconds,
+                            onValueChange = { next -> draft = draft.copy(endTimeSeconds = next) },
+                            maxSeconds = 43200,
+                        )
+                    }
+
+                    WaterCurveStageKind.BYPASS -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            StageWheelField(
+                                label = "旁路水量",
+                                value = draft.waterText,
+                                onValueChange = { draft = draft.copy(waterText = it) },
+                                minValue = 5.0,
+                                maxValue = 1000.0,
+                                step = 5.0,
+                                unit = "ml",
+                                allowEmpty = false,
+                                modifier = Modifier.weight(1f),
+                            )
+                            StageWheelField(
+                                label = quickTemperatureShortLabel(temperatureMode),
+                                value = draft.quickTemperatureText,
+                                onValueChange = { draft = draft.copy(quickTemperatureText = it) },
                                 minValue = 0.0,
                                 maxValue = 100.0,
                                 step = 1.0,
-                                decimals = 0,
                                 unit = "°C",
                                 modifier = Modifier.weight(1f),
                             )
                         }
                     }
                 }
+
+                OutlinedButton(
+                    onClick = { draft = draft.copy(showAdvancedTemperature = !draft.showAdvancedTemperature) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (draft.showAdvancedTemperature) "收起高级温度" else "高级温度")
+                }
+
+                AnimatedVisibility(visible = draft.showAdvancedTemperature) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            StageWheelField(
+                                label = "起始温度",
+                                value = draft.startTempText,
+                                onValueChange = { draft = draft.copy(startTempText = it) },
+                                minValue = 0.0,
+                                maxValue = 100.0,
+                                step = 1.0,
+                                unit = "°C",
+                                modifier = Modifier.weight(1f),
+                            )
+                            StageWheelField(
+                                label = "结束温度",
+                                value = draft.endTempText,
+                                onValueChange = { draft = draft.copy(endTempText = it) },
+                                minValue = 0.0,
+                                maxValue = 100.0,
+                                step = 1.0,
+                                unit = "°C",
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (draft.kind == WaterCurveStageKind.WAIT) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                StageWheelField(
+                                    label = "环境起始",
+                                    value = draft.ambientStartTempText,
+                                    onValueChange = { draft = draft.copy(ambientStartTempText = it) },
+                                    minValue = 0.0,
+                                    maxValue = 100.0,
+                                    step = 1.0,
+                                    unit = "°C",
+                                    modifier = Modifier.weight(1f),
+                                )
+                                StageWheelField(
+                                    label = "环境结束",
+                                    value = draft.ambientEndTempText,
+                                    onValueChange = { draft = draft.copy(ambientEndTempText = it) },
+                                    minValue = 0.0,
+                                    maxValue = 100.0,
+                                    step = 1.0,
+                                    unit = "°C",
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+                }
             }
-        }
-    }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(draft) }) {
+                Text("完成")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
 }
 
 private fun stageSummary(
@@ -700,42 +767,473 @@ private fun SummaryValueChip(
 }
 
 @Composable
-private fun NumericValueDialog(
+private fun DurationWheelField(
+    label: String,
+    valueSeconds: Int?,
+    onValueChange: (Int?) -> Unit,
+    maxSeconds: Int,
+    modifier: Modifier = Modifier,
+    minSeconds: Int = 5,
+    secondStep: Int = 5,
+) {
+    var showDirectInput by remember { mutableStateOf(false) }
+    val normalizedSeconds = normalizeDurationWheelValue(
+        valueSeconds = valueSeconds,
+        minSeconds = minSeconds,
+        maxSeconds = maxSeconds,
+        secondStep = secondStep,
+    )
+    val hours = normalizedSeconds / 3600
+    val minutes = (normalizedSeconds % 3600) / 60
+    val seconds = normalizedSeconds % 60
+    val maxHours = (maxSeconds / 3600).coerceAtLeast(0)
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            OutlinedButton(onClick = { showDirectInput = true }) {
+                Text(formatDurationValue(normalizedSeconds))
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            DurationPickerWheel(
+                label = "时",
+                range = 0..maxHours,
+                value = hours.coerceIn(0, maxHours),
+                onValueChange = { nextHour ->
+                    onValueChange(composeDurationWheelSeconds(nextHour, minutes, seconds, minSeconds, maxSeconds, secondStep))
+                },
+                modifier = Modifier.weight(1f),
+            )
+            DurationPickerWheel(
+                label = "分",
+                range = 0..59,
+                value = minutes,
+                onValueChange = { nextMinute ->
+                    onValueChange(composeDurationWheelSeconds(hours, nextMinute, seconds, minSeconds, maxSeconds, secondStep))
+                },
+                modifier = Modifier.weight(1f),
+            )
+            DurationPickerWheel(
+                label = "秒",
+                range = 0..(59 / secondStep.coerceAtLeast(1)),
+                value = seconds / secondStep.coerceAtLeast(1),
+                valueFormatter = { index -> "%02d".format(index * secondStep.coerceAtLeast(1)) },
+                onValueChange = { nextSecondIndex ->
+                    onValueChange(
+                        composeDurationWheelSeconds(
+                            hours = hours,
+                            minutes = minutes,
+                            seconds = nextSecondIndex * secondStep.coerceAtLeast(1),
+                            minSeconds = minSeconds,
+                            maxSeconds = maxSeconds,
+                            secondStep = secondStep,
+                        ),
+                    )
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+
+    if (showDirectInput) {
+        DirectNumberInputDialog(
+            title = label,
+            value = normalizedSeconds.toString(),
+            unit = "s",
+            minValue = minSeconds.toDouble(),
+            maxValue = maxSeconds.toDouble(),
+            step = secondStep.toDouble(),
+            decimals = 0,
+            allowEmpty = false,
+            onDismiss = { showDirectInput = false },
+            onConfirm = {
+                onValueChange(it.toIntOrNull())
+                showDirectInput = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun DurationPickerWheel(
+    label: String,
+    range: IntRange,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    valueFormatter: (Int) -> String = { "%02d".format(it) },
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AndroidView(
+            factory = { context ->
+                NumberPicker(context).apply {
+                    this.minValue = range.first
+                    this.maxValue = range.last
+                    this.value = value.coerceIn(range.first, range.last)
+                    this.wrapSelectorWheel = false
+                    this.descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                    this.layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    )
+                    setFormatter { index -> valueFormatter(index) }
+                    setOnValueChangedListener { _, _, newValue -> onValueChange(newValue) }
+                }
+            },
+            update = { picker ->
+                picker.minValue = range.first
+                picker.maxValue = range.last
+                picker.setFormatter { index -> valueFormatter(index) }
+                val nextValue = value.coerceIn(range.first, range.last)
+                if (picker.value != nextValue) {
+                    picker.value = nextValue
+                }
+                picker.invalidate()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(86.dp),
+        )
+    }
+}
+
+internal fun normalizeDurationWheelValue(
+    valueSeconds: Int?,
+    minSeconds: Int,
+    maxSeconds: Int,
+    secondStep: Int,
+): Int {
+    val safeStep = secondStep.coerceAtLeast(1)
+    val safeMin = minSeconds.coerceAtLeast(0)
+    val safeMax = maxSeconds.coerceAtLeast(safeMin)
+    val raw = valueSeconds ?: safeMin
+    val clamped = raw.coerceIn(safeMin, safeMax)
+    val snapped = safeMin + (((clamped - safeMin).toDouble() / safeStep).roundToInt() * safeStep)
+    return snapped.coerceIn(safeMin, safeMax)
+}
+
+internal fun composeDurationWheelSeconds(
+    hours: Int,
+    minutes: Int,
+    seconds: Int,
+    minSeconds: Int,
+    maxSeconds: Int,
+    secondStep: Int,
+): Int {
+    val safeSeconds = seconds.coerceAtLeast(0)
+    val raw = hours.coerceAtLeast(0) * 3600 + minutes.coerceIn(0, 59) * 60 + safeSeconds
+    return normalizeDurationWheelValue(raw, minSeconds, maxSeconds, secondStep)
+}
+
+@Composable
+private fun StageWheelField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    minValue: Double,
+    maxValue: Double,
+    step: Double,
+    unit: String,
+    modifier: Modifier = Modifier,
+    decimals: Int = 0,
+    allowEmpty: Boolean = true,
+    displayAsDuration: Boolean = false,
+) {
+    var showDirectInput by remember { mutableStateOf(false) }
+    val normalizedValue = normalizeWheelNumericValue(
+        raw = value,
+        minValue = minValue,
+        maxValue = maxValue,
+        step = step,
+        decimals = decimals,
+        allowEmpty = allowEmpty,
+    )
+    val pickerBaseValue = normalizedValue.toDoubleOrNull() ?: minValue
+    val pickerIndex = wheelIndexForValue(
+        value = pickerBaseValue,
+        minValue = minValue,
+        maxValue = maxValue,
+        step = step,
+    )
+    val pickerStepCount = wheelStepCount(minValue, maxValue, step)
+    val wheelMinValue = minValue
+    val wheelStep = step
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            OutlinedButton(onClick = { showDirectInput = true }) {
+                Text(
+                    text = formatWheelDisplay(
+                        value = normalizedValue,
+                        unit = unit,
+                        displayAsDuration = displayAsDuration,
+                    ).ifBlank { "输入" },
+                )
+            }
+            if (allowEmpty && normalizedValue.isNotBlank()) {
+                TextButton(onClick = { onValueChange("") }) {
+                    Text("清空")
+                }
+            }
+        }
+        AndroidView(
+            factory = { context ->
+                NumberPicker(context).apply {
+                    this.minValue = 0
+                    this.maxValue = pickerStepCount
+                    this.value = pickerIndex
+                    this.wrapSelectorWheel = false
+                    this.descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                    this.layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    )
+                    setFormatter { index ->
+                        formatWheelPickerLabel(
+                            value = wheelValueForIndex(index, wheelMinValue, wheelStep),
+                            unit = unit,
+                            decimals = decimals,
+                            displayAsDuration = displayAsDuration,
+                        )
+                    }
+                    setOnValueChangedListener { _, _, newValue ->
+                        onValueChange(
+                            formatWheelNumber(
+                                value = wheelValueForIndex(newValue, wheelMinValue, wheelStep),
+                                decimals = decimals,
+                            ),
+                        )
+                    }
+                }
+            },
+            update = { picker ->
+                picker.setFormatter { index ->
+                    formatWheelPickerLabel(
+                        value = wheelValueForIndex(index, wheelMinValue, wheelStep),
+                        unit = unit,
+                        decimals = decimals,
+                        displayAsDuration = displayAsDuration,
+                    )
+                }
+                picker.minValue = 0
+                picker.maxValue = pickerStepCount
+                if (picker.value != pickerIndex) {
+                    picker.value = pickerIndex
+                }
+                picker.invalidate()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp),
+        )
+    }
+
+    if (showDirectInput) {
+        DirectNumberInputDialog(
+            title = label,
+            value = normalizedValue,
+            unit = unit,
+            minValue = minValue,
+            maxValue = maxValue,
+            step = step,
+            decimals = decimals,
+            allowEmpty = allowEmpty,
+            onDismiss = { showDirectInput = false },
+            onConfirm = {
+                onValueChange(it)
+                showDirectInput = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun DirectNumberInputDialog(
     title: String,
     value: String,
     unit: String,
+    minValue: Double,
+    maxValue: Double,
     step: Double,
     decimals: Int,
+    allowEmpty: Boolean,
     onDismiss: () -> Unit,
-    onValueChange: (String) -> Unit,
+    onConfirm: (String) -> Unit,
 ) {
     var draft by remember(value) { mutableStateOf(value) }
+    val normalizedDraft = normalizeWheelNumericValue(
+        raw = draft,
+        minValue = minValue,
+        maxValue = maxValue,
+        step = step,
+        decimals = decimals,
+        allowEmpty = allowEmpty,
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            NumericStepField(
-                label = "$title ($unit)",
-                value = draft,
-                onValueChange = { draft = it },
-                step = step,
-                decimals = decimals,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text(if (unit.isBlank()) title else "$title ($unit)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = "当前：${formatWheelDisplay(normalizedDraft, unit, displayAsDuration = false).ifBlank { "未填写" }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         },
         confirmButton = {
-            OutlinedButton(onClick = {
-                onValueChange(draft)
-                onDismiss()
-            }) {
+            Button(onClick = { onConfirm(normalizedDraft) }) {
                 Text("确定")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("取消")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (allowEmpty) {
+                    OutlinedButton(onClick = { onConfirm("") }) {
+                        Text("清空")
+                    }
+                }
+                OutlinedButton(onClick = onDismiss) {
+                    Text("取消")
+                }
             }
         },
     )
+}
+
+internal fun normalizeWheelNumericValue(
+    raw: String,
+    minValue: Double,
+    maxValue: Double,
+    step: Double,
+    decimals: Int,
+    allowEmpty: Boolean,
+): String {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) {
+        return if (allowEmpty) "" else formatWheelNumber(minValue, decimals)
+    }
+    val parsed = trimmed.toDoubleOrNull()
+        ?: return if (allowEmpty) "" else formatWheelNumber(minValue, decimals)
+    val safeStep = step.takeIf { it > 0.0 } ?: 1.0
+    val clamped = parsed.coerceIn(minValue, maxValue)
+    val snapped = minValue + (((clamped - minValue) / safeStep).roundToInt() * safeStep)
+    return formatWheelNumber(snapped.coerceIn(minValue, maxValue), decimals)
+}
+
+internal fun wheelIndexForValue(
+    value: Double,
+    minValue: Double,
+    maxValue: Double,
+    step: Double,
+): Int {
+    val safeStep = step.takeIf { it > 0.0 } ?: 1.0
+    val clamped = value.coerceIn(minValue, maxValue)
+    return (((clamped - minValue) / safeStep).roundToInt()).coerceIn(0, wheelStepCount(minValue, maxValue, safeStep))
+}
+
+private fun wheelStepCount(
+    minValue: Double,
+    maxValue: Double,
+    step: Double,
+): Int {
+    val safeStep = step.takeIf { it > 0.0 } ?: 1.0
+    return ((maxValue - minValue) / safeStep).roundToInt().coerceAtLeast(0)
+}
+
+private fun wheelValueForIndex(
+    index: Int,
+    minValue: Double,
+    step: Double,
+): Double {
+    val safeStep = step.takeIf { it > 0.0 } ?: 1.0
+    return minValue + index.coerceAtLeast(0) * safeStep
+}
+
+private fun formatWheelPickerLabel(
+    value: Double,
+    unit: String,
+    decimals: Int,
+    displayAsDuration: Boolean,
+): String {
+    return if (displayAsDuration) {
+        formatDurationValue(value.roundToInt())
+    } else {
+        formatWheelDisplay(formatWheelNumber(value, decimals), unit, displayAsDuration = false)
+    }
+}
+
+private fun formatWheelDisplay(
+    value: String,
+    unit: String,
+    displayAsDuration: Boolean,
+): String {
+    if (value.isBlank()) return ""
+    if (displayAsDuration) {
+        return value.toIntOrNull()?.let(::formatDurationValue).orEmpty()
+    }
+    return if (unit.isBlank()) value else "$value $unit"
+}
+
+private fun formatWheelNumber(
+    value: Double,
+    decimals: Int,
+): String {
+    val safeDecimals = decimals.coerceAtLeast(0)
+    val formatted = String.format(Locale.US, "%.${safeDecimals}f", value.coerceAtLeast(0.0))
+    return if (safeDecimals == 0) {
+        formatted
+    } else {
+        formatted.trimEnd('0').trimEnd('.')
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

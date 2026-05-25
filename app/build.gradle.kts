@@ -4,6 +4,7 @@ import org.gradle.kotlin.dsl.configure
 plugins {
     alias(libs.plugins.android.application)
     id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
 }
@@ -14,7 +15,7 @@ extensions.configure<ApplicationExtension>("android") {
 
     defaultConfig {
         applicationId = "com.qoffee"
-        minSdk = 26
+        minSdk = 23
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
@@ -26,8 +27,16 @@ extensions.configure<ApplicationExtension>("android") {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "QOFFEE_TEST_API_BASE_URL", "\"http://114.55.247.31/api/v1\"")
+            buildConfigField("String", "QOFFEE_PRODUCTION_API_BASE_URL", "\"https://qoffee-api.quaternijkon.online/api/v1\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
             isMinifyEnabled = false
+            buildConfigField("String", "QOFFEE_TEST_API_BASE_URL", "\"http://114.55.247.31/api/v1\"")
+            buildConfigField("String", "QOFFEE_PRODUCTION_API_BASE_URL", "\"https://qoffee-api.quaternijkon.online/api/v1\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -38,6 +47,7 @@ extensions.configure<ApplicationExtension>("android") {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures {
@@ -94,6 +104,13 @@ dependencies {
     implementation(libs.google.material)
     implementation(libs.google.hilt.android)
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.client.auth)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.kotlinx.serialization.json)
+    coreLibraryDesugaring(libs.android.desugar.jdk.libs)
 
     add("ksp", libs.androidx.room.compiler)
     add("ksp", libs.google.hilt.compiler)

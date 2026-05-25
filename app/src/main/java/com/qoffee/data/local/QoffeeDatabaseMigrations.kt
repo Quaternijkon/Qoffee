@@ -1045,4 +1045,82 @@ object QoffeeDatabaseMigrations {
             db.execSQL("ALTER TABLE `collection` ADD COLUMN `configJson` TEXT NOT NULL DEFAULT ''")
         }
     }
+
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_entity_map` (
+                    `tableName` TEXT NOT NULL,
+                    `localKey` TEXT NOT NULL,
+                    `remoteId` TEXT NOT NULL,
+                    `serverVersion` INTEGER NOT NULL,
+                    `lastSyncedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`tableName`, `localKey`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_entity_map_remoteId` ON `sync_entity_map` (`remoteId`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_outbox` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `tableName` TEXT NOT NULL,
+                    `localKey` TEXT NOT NULL,
+                    `remoteId` TEXT,
+                    `baseVersion` INTEGER,
+                    `operation` TEXT NOT NULL,
+                    `payloadJson` TEXT NOT NULL,
+                    `clientChangedAt` INTEGER NOT NULL,
+                    `attempts` INTEGER NOT NULL,
+                    `lastError` TEXT
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_outbox_tableName` ON `sync_outbox` (`tableName`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_outbox_localKey` ON `sync_outbox` (`localKey`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_outbox_clientChangedAt` ON `sync_outbox` (`clientChangedAt`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_tombstones` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `tableName` TEXT NOT NULL,
+                    `localKey` TEXT NOT NULL,
+                    `remoteId` TEXT,
+                    `baseVersion` INTEGER,
+                    `payloadJson` TEXT NOT NULL,
+                    `deletedAt` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_tombstones_tableName` ON `sync_tombstones` (`tableName`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_tombstones_localKey` ON `sync_tombstones` (`localKey`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_tombstones_deletedAt` ON `sync_tombstones` (`deletedAt`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_cursors` (
+                    `scope` TEXT NOT NULL PRIMARY KEY,
+                    `cursor` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_conflict_cache` (
+                    `id` TEXT NOT NULL PRIMARY KEY,
+                    `tableName` TEXT NOT NULL,
+                    `remoteId` TEXT NOT NULL,
+                    `localKey` TEXT NOT NULL,
+                    `remoteVersion` INTEGER NOT NULL,
+                    `localBaseVersion` INTEGER,
+                    `remotePayloadJson` TEXT NOT NULL,
+                    `localPayloadJson` TEXT NOT NULL,
+                    `summary` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+        }
+    }
 }

@@ -2,11 +2,13 @@ package com.qoffee.feature.records
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -57,6 +61,7 @@ import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
 import com.qoffee.ui.QoffeeTestTags
 import com.qoffee.ui.components.BeanIdentityCard
+import com.qoffee.ui.components.DashboardActionBar
 import com.qoffee.ui.components.DropdownField
 import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.EmptyStateCard
@@ -65,14 +70,18 @@ import com.qoffee.ui.components.InlineRulerField
 import com.qoffee.ui.components.NumericStepField
 import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.MovieRatingSelector
+import com.qoffee.ui.components.ParameterSummaryStrip
 import com.qoffee.ui.components.SectionCard
+import com.qoffee.ui.components.SmartNumberControl
 import com.qoffee.ui.components.StatChip
 import com.qoffee.ui.components.TagSelector
+import com.qoffee.ui.components.TastingScorePanel
 import com.qoffee.ui.components.DateTimePickerField
 import com.qoffee.ui.components.WaterCurveEditor
 import com.qoffee.ui.components.WaterCurveFormResult
 import com.qoffee.ui.components.WaterCurveStageEditorState
 import com.qoffee.ui.components.WaterCurveStageKind
+import com.qoffee.ui.components.buildWaterQuickValuesForDose
 import com.qoffee.ui.components.buildWaterCurveFormResult
 import com.qoffee.ui.components.createDefaultWaterCurveStage
 import com.qoffee.ui.components.toEditorStageStates
@@ -613,6 +622,10 @@ fun RecordEditorRoute(
         onBrewedAtChange = viewModel::updateBrewedAt,
         onGrindSettingChange = viewModel::updateGrindSetting,
         onCoffeeDoseChange = viewModel::updateCoffeeDose,
+        onBrewWaterChange = viewModel::updateBrewWater,
+        onBypassWaterChange = viewModel::updateBypassWater,
+        onWaterTempChange = viewModel::updateWaterTemp,
+        onBrewDurationChange = viewModel::updateBrewDuration,
         onWaterCurveTemperatureModeChange = viewModel::updateWaterCurveTemperatureMode,
         onWaterCurveAmbientTempChange = viewModel::updateWaterCurveAmbientTemp,
         onWaterCurveContainerTypeChange = viewModel::updateWaterCurveContainerType,
@@ -651,6 +664,10 @@ private fun RecordEditorScreenLegacy(
     onBrewedAtChange: (Long?) -> Unit,
     onGrindSettingChange: (String) -> Unit,
     onCoffeeDoseChange: (String) -> Unit,
+    onBrewWaterChange: (String) -> Unit,
+    onBypassWaterChange: (String) -> Unit,
+    onWaterTempChange: (String) -> Unit,
+    onBrewDurationChange: (String) -> Unit,
     onWaterCurveTemperatureModeChange: (WaterCurveTemperatureMode) -> Unit,
     onWaterCurveAmbientTempChange: (String) -> Unit,
     onWaterCurveContainerTypeChange: (ThermalContainerType?) -> Unit,
@@ -685,6 +702,10 @@ private fun RecordEditorScreenLegacy(
         onBrewedAtChange = onBrewedAtChange,
         onGrindSettingChange = onGrindSettingChange,
         onCoffeeDoseChange = onCoffeeDoseChange,
+        onBrewWaterChange = onBrewWaterChange,
+        onBypassWaterChange = onBypassWaterChange,
+        onWaterTempChange = onWaterTempChange,
+        onBrewDurationChange = onBrewDurationChange,
         onWaterCurveTemperatureModeChange = onWaterCurveTemperatureModeChange,
         onWaterCurveAmbientTempChange = onWaterCurveAmbientTempChange,
         onWaterCurveContainerTypeChange = onWaterCurveContainerTypeChange,
@@ -736,7 +757,6 @@ private fun RecordEditorScreenLegacy(
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
-            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 20.dp)
             .testTag(QoffeeTestTags.RECORD_EDITOR_SCREEN),
@@ -1028,6 +1048,10 @@ private fun RecordEditorScreen(
     onBrewedAtChange: (Long?) -> Unit,
     onGrindSettingChange: (String) -> Unit,
     onCoffeeDoseChange: (String) -> Unit,
+    onBrewWaterChange: (String) -> Unit,
+    onBypassWaterChange: (String) -> Unit,
+    onWaterTempChange: (String) -> Unit,
+    onBrewDurationChange: (String) -> Unit,
     onWaterCurveTemperatureModeChange: (WaterCurveTemperatureMode) -> Unit,
     onWaterCurveAmbientTempChange: (String) -> Unit,
     onWaterCurveContainerTypeChange: (ThermalContainerType?) -> Unit,
@@ -1052,7 +1076,7 @@ private fun RecordEditorScreen(
     if (uiState.isLoading) {
         EmptyStateCard(
             title = "正在准备记录",
-            subtitle = "Qoffee 正在恢复当前草稿或创建一条新的记录。",
+            subtitle = "正在恢复草稿或创建新记录。",
             modifier = Modifier.padding(paddingValues),
         )
         return
@@ -1080,267 +1104,438 @@ private fun RecordEditorScreen(
         roastLevel = selectedBean?.roastLevel ?: uiState.record?.beanRoastLevelSnapshot,
         brewMethod = uiState.objective.brewMethod,
     )
+    var selectedSection by remember { mutableStateOf(EditorSection.PARAMETERS) }
+    val progress = remember(uiState.objective, uiState.subjective) {
+        buildEditorProgress(uiState.objective, uiState.subjective)
+    }
+    val parameterSummary = remember(uiState.objective) {
+        buildEditorParameterSummary(uiState.objective)
+    }
+    val missingFields = remember(uiState.objective, uiState.subjective) {
+        buildEditorMissingFields(uiState.objective, uiState.subjective)
+    }
+    val tastingScoreItems = remember(uiState.subjective) {
+        buildTastingScoreItems(uiState.subjective)
+    }
+    val objectiveBlockingErrors = remember(uiState.objective) {
+        validateObjectiveInput(uiState.objective)
+    }
+    val primaryActionLabel = when {
+        currentStep == 0 && objectiveBlockingErrors.isNotEmpty() -> "先保存草稿"
+        currentStep == 0 && uiState.subjective.overall == null -> "继续记录感受"
+        uiState.subjective.overall != null -> "完成记录"
+        else -> "继续记录感受"
+    }
+    val actionBarTitle = if (currentStep == 0) "客观参数" else "主观感受"
+    val actionBarSubtitle = if (currentStep == 0) {
+        if (missingFields.isEmpty()) "这杯已经可以完成。" else "还差 ${missingFields.joinToString("、")}，也可以先保存草稿。"
+    } else {
+        "总评填好后即可完成记录。"
+    }
 
-    Column(
+    Scaffold(
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 20.dp)
             .testTag(QoffeeTestTags.RECORD_EDITOR_SCREEN),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        PageHeader(
-            title = editorTitle(uiState),
-            subtitle = editorSubtitle(uiState),
-            eyebrow = "QOFFEE / RECORD",
-        )
+        containerColor = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            DashboardActionBar(
+                title = actionBarTitle,
+                subtitle = actionBarSubtitle,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            if (currentStep == 0) onBack() else currentStep = 0
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(if (currentStep == 0) "返回" else "上一步")
+                    }
+                    Button(
+                        onClick = {
+                            if (currentStep == 0 && objectiveBlockingErrors.isNotEmpty()) {
+                                onBack()
+                            } else if (currentStep == 0) {
+                                currentStep = 1
+                                selectedSection = EditorSection.TASTING
+                            } else {
+                                onSubmit()
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag(QoffeeTestTags.RECORD_EDITOR_BOTTOM_ACTION),
+                    ) {
+                        Text(primaryActionLabel)
+                    }
+                }
+            }
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            PageHeader(
+                title = editorTitle(uiState),
+                subtitle = editorSubtitle(uiState),
+                eyebrow = "QOFFEE / RECORD",
+            )
 
-        SectionCard(title = "来源") {
+            SectionCard(
+                title = progress.label,
+                subtitle = if (missingFields.isEmpty()) {
+                    "这杯已经可以完成。"
+                } else {
+                    "还差 ${missingFields.joinToString("、")}，也可以先保存草稿。"
+                },
+                modifier = Modifier.testTag(QoffeeTestTags.RECORD_EDITOR_SUMMARY),
+            ) {
+                ParameterSummaryStrip(items = parameterSummary)
+            }
+
             FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(QoffeeTestTags.RECORD_EDITOR_SECTION_TABS),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                StatChip(text = when (uiState.entry) {
-                    RecordEditorEntry.NEW -> "空白新建"
-                    RecordEditorEntry.DRAFT -> "继续草稿"
-                    RecordEditorEntry.DUPLICATE -> "复制上一杯"
-                    RecordEditorEntry.RECIPE -> "从配方开始"
-                    RecordEditorEntry.BEAN -> "从豆子开始"
-                })
-                uiState.objective.recipeNameSnapshot?.let { StatChip(text = "配方 $it") }
-                if (uiState.entry == RecordEditorEntry.BEAN) {
-                    uiState.beans.firstOrNull { it.id == uiState.objective.beanProfileId }?.let { bean ->
-                        StatChip(text = bean.name)
-                    }
-                }
-            }
-            uiState.referenceRecord?.let { reference ->
-                Text(
-                    text = "${reference.beanNameSnapshot ?: "未命名豆子"} · ${reference.brewMethod?.displayName ?: "未指定方式"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        SectionCard(title = "步骤") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StepChip(label = "客观", selected = currentStep == 0, onClick = { currentStep = 0 })
-                StepChip(label = "主观", selected = currentStep == 1, onClick = { currentStep = 1 })
-            }
-        }
-
-        if (currentStep == 0) {
-            SectionCard(title = "配方", subtitle = "配方就是可复用的记录客观参数，可以直接从这条记录生成。") {
-                DropdownField(
-                    label = "采用配方",
-                    selectedLabel = uiState.recipes.firstOrNull { it.id == uiState.objective.recipeTemplateId }?.name
-                        ?: uiState.objective.recipeNameSnapshot,
-                    options = uiState.recipes.map { DropdownOption(it.name, it.id) },
-                    onSelected = onRecipeSelected,
-                    allowClear = false,
-                )
-                OutlinedButton(
-                    onClick = { showSaveRecipeDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("设为配方")
-                }
-                if (uiState.objective.recipeTemplateId != null && !uiState.objective.recipeNameSnapshot.isNullOrBlank()) {
-                    OutlinedButton(
-                        onClick = onOverwriteCurrentRecipe,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("覆盖原配方")
-                    }
+                EditorSection.entries.forEach { section ->
+                    StepChip(
+                        label = section.label,
+                        selected = selectedSection == section,
+                        onClick = {
+                            selectedSection = section
+                            currentStep = when (section) {
+                                EditorSection.TASTING,
+                                EditorSection.REVIEW -> 1
+                                EditorSection.SOURCE,
+                                EditorSection.PARAMETERS,
+                                EditorSection.WATER -> 0
+                            }
+                        },
+                    )
                 }
             }
 
-            SectionCard(title = "参数") {
-                DropdownField(
-                    label = "制作方式",
-                    selectedLabel = uiState.objective.brewMethod?.displayName,
-                    options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
-                    onSelected = onMethodChange,
-                    modifier = Modifier.testTag("brew_method_dropdown"),
-                )
-                DropdownField(
-                    label = "咖啡豆",
-                    selectedLabel = selectedBean?.name,
-                    options = uiState.beans.map { DropdownOption(it.name, it.id) },
-                    onSelected = onBeanChange,
-                    modifier = Modifier.testTag("bean_dropdown"),
-                )
-                AnimatedVisibility(visible = selectedBean != null) {
-                    selectedBean?.let { bean ->
-                        BeanIdentityCard(
-                            name = bean.name,
-                            roastLevel = bean.roastLevel,
-                            processMethod = bean.processMethod,
-                            roaster = bean.roaster,
-                        )
-                    }
-                }
-                DropdownField(
-                    label = "磨豆机",
-                    selectedLabel = uiState.grinders.firstOrNull { it.id == uiState.objective.grinderProfileId }?.name,
-                    options = uiState.grinders.map { DropdownOption(it.name, it.id) },
-                    onSelected = onGrinderChange,
-                )
-                DateTimePickerField(
-                    label = "记录时间",
-                    valueMillis = uiState.objective.brewedAtMillis,
-                    onValueChange = { onBrewedAtChange(it) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                GrindDialField(
-                    label = selectedGrinder?.let { "${it.name} 刻度" } ?: "研磨格数",
-                    value = uiState.objective.grindSetting,
-                    onValueChange = onGrindSettingChange,
-                    minValue = selectedGrinder?.minSetting ?: 0.0,
-                    maxValue = selectedGrinder?.maxSetting ?: 40.0,
-                    step = selectedGrinder?.stepSize ?: 1.0,
-                    decimals = 1,
-                    referenceValue = uiState.referenceRecord?.grindSetting?.let(::formatNumber),
-                    normalizedValueText = normalizedGrindValue?.let(::formatNormalizedGrind),
-                )
-                InlineRulerField(
-                    label = "咖啡粉重量",
-                    value = uiState.objective.coffeeDoseG,
-                    onValueChange = onCoffeeDoseChange,
-                    minValue = 0.0,
-                    maxValue = 60.0,
-                    step = 0.5,
-                    decimals = 1,
-                    unit = "g",
-                    referenceValue = uiState.referenceRecord?.coffeeDoseG?.let { "${formatNumber(it)} g" },
-                )
-                if (waterCurveDerivedValues != null) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        waterCurveDerivedValues.brewWaterMl?.let { StatChip(text = "萃取水 ${formatNumber(it)}ml") }
-                        waterCurveDerivedValues.bypassWaterMl?.let { StatChip(text = "旁路 ${formatNumber(it)}ml") }
-                        waterCurveDerivedValues.brewDurationSeconds?.let { StatChip(text = "时长 ${it}s") }
-                        normalizedGrindValue?.let { StatChip(text = "归一化 ${formatNormalizedGrind(it)}") }
-                    }
-                }
-                WaterCurveEditor(
-                    temperatureMode = uiState.objective.waterCurveTemperatureMode,
-                    onTemperatureModeChange = onWaterCurveTemperatureModeChange,
-                    ambientTempText = uiState.objective.waterCurveAmbientTempC,
-                    onAmbientTempChange = onWaterCurveAmbientTempChange,
-                    containerType = uiState.objective.waterCurveContainerType,
-                    onContainerTypeChange = onWaterCurveContainerTypeChange,
-                    stages = uiState.objective.waterCurveStages,
-                    onStageChange = onWaterCurveStageChange,
-                    onAddStage = onAddWaterCurveStage,
-                    onMoveStageUp = onMoveWaterCurveStageUp,
-                    onMoveStageDown = onMoveWaterCurveStageDown,
-                    onRemoveStage = onRemoveWaterCurveStage,
-                    previewCurve = waterCurveResult.curve,
-                    derivedValues = waterCurveDerivedValues,
-                    analysis = waterCurveAnalysis,
-                    legacySummary = uiState.objective.legacyWaterCurveSummary,
-                )
-                OutlinedTextField(
-                    value = uiState.objective.notes,
-                    onValueChange = onObjectiveNotesChange,
-                    label = { Text("备注") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        } else {
-            SectionCard(title = "主观感受") {
-                MovieRatingSelector(label = "香气", value = uiState.subjective.aroma, range = 1..5, onSelected = onAromaChange)
-                MovieRatingSelector(label = "酸质", value = uiState.subjective.acidity, range = 1..5, onSelected = onAcidityChange)
-                MovieRatingSelector(label = "甜感", value = uiState.subjective.sweetness, range = 1..5, onSelected = onSweetnessChange)
-                MovieRatingSelector(label = "苦感", value = uiState.subjective.bitterness, range = 1..5, onSelected = onBitternessChange)
-                MovieRatingSelector(label = "醇厚", value = uiState.subjective.body, range = 1..5, onSelected = onBodyChange)
-                MovieRatingSelector(label = "余韵", value = uiState.subjective.aftertaste, range = 1..5, onSelected = onAftertasteChange)
-                MovieRatingSelector(label = "总体评分", value = uiState.subjective.overall, range = 1..5, onSelected = onOverallChange)
-                TagSelector(
-                    tags = uiState.flavorTags.map { it.name },
-                    selected = uiState.subjective.tags.map { it.name }.toSet(),
-                    onToggle = { name ->
-                        uiState.flavorTags.firstOrNull { it.name == name }?.let(onToggleTag)
-                    },
-                )
-                OutlinedTextField(
-                    value = customTag,
-                    onValueChange = { customTag = it },
-                    label = { Text("自定义风味标签") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(onClick = {
-                    onAddCustomTag(customTag)
-                    customTag = ""
-                }) {
-                    Text("添加标签")
-                }
-                OutlinedTextField(
-                    value = uiState.subjective.notes,
-                    onValueChange = onSubjectiveNotesChange,
-                    label = { Text("主观备注") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            SectionCard(title = "检查") {
+            SectionCard(title = "来源") {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    uiState.objective.recipeNameSnapshot?.let {
-                        StatChip(text = "配方 $it")
-                    }
-                    uiState.subjective.overall?.let {
-                        StatChip(text = "评分 $it / 5")
+                    StatChip(text = when (uiState.entry) {
+                        RecordEditorEntry.NEW -> "空白新建"
+                        RecordEditorEntry.DRAFT -> "继续草稿"
+                        RecordEditorEntry.DUPLICATE -> "复制上一杯"
+                        RecordEditorEntry.RECIPE -> "从配方开始"
+                        RecordEditorEntry.BEAN -> "从豆子开始"
+                    })
+                    uiState.objective.recipeNameSnapshot?.let { StatChip(text = "配方 $it") }
+                    if (uiState.entry == RecordEditorEntry.BEAN) {
+                        uiState.beans.firstOrNull { it.id == uiState.objective.beanProfileId }?.let { bean ->
+                            StatChip(text = bean.name)
+                        }
                     }
                 }
                 uiState.referenceRecord?.let { reference ->
-                    val comparison = buildComparisonSummary(uiState.record ?: reference, reference)
-                    Text(text = comparison.headline, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = comparison.details.joinToString(" 路 "),
+                        text = buildString {
+                            append(reference.beanNameSnapshot ?: "未命名豆子")
+                            append(" · ")
+                            append(reference.brewMethod?.displayName ?: "未指定方式")
+                            append(" · ")
+                            append(formatDateTime(reference.brewedAt))
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (uiState.validationErrors.isNotEmpty()) {
-                    uiState.validationErrors.forEach { error ->
-                        Text(
-                            text = "• $error",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+            }
+
+            SectionCard(title = "填写进度") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StepChip(label = "客观", selected = currentStep == 0, onClick = {
+                        currentStep = 0
+                        selectedSection = EditorSection.PARAMETERS
+                    })
+                    StepChip(label = "主观", selected = currentStep == 1, onClick = {
+                        currentStep = 1
+                        selectedSection = EditorSection.TASTING
+                    })
+                    Text(
+                        text = if (currentStep == 0) "参数会自动保存" else "评分后即可提交",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-        }
 
-        SectionCard(title = "操作") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        if (currentStep == 0) onBack() else currentStep = 0
-                    },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(if (currentStep == 0) "返回" else "上一步")
+            if (currentStep == 0) {
+                SectionCard(title = "配方", subtitle = "把当前客观参数保存为配方，后续可一键复用。") {
+                    DropdownField(
+                        label = "采用配方",
+                        selectedLabel = uiState.recipes.firstOrNull { it.id == uiState.objective.recipeTemplateId }?.name
+                            ?: uiState.objective.recipeNameSnapshot,
+                        options = uiState.recipes.map { DropdownOption(it.name, it.id) },
+                        onSelected = onRecipeSelected,
+                        allowClear = false,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = { showSaveRecipeDialog = true },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("设为配方")
+                        }
+                        if (uiState.objective.recipeTemplateId != null && !uiState.objective.recipeNameSnapshot.isNullOrBlank()) {
+                            OutlinedButton(
+                                onClick = onOverwriteCurrentRecipe,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text("覆盖原配方")
+                            }
+                        }
+                    }
                 }
-                Button(
-                    onClick = {
-                        if (currentStep == 0) currentStep = 1 else onSubmit()
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("submit_record_button"),
-                ) {
-                    Text(if (currentStep == 0) "下一步" else "提交")
+
+                SectionCard(title = "参数") {
+                    DropdownField(
+                        label = "制作方式",
+                        selectedLabel = uiState.objective.brewMethod?.displayName,
+                        options = BrewMethod.entries.map { DropdownOption(it.displayName, it) },
+                        onSelected = onMethodChange,
+                        modifier = Modifier.testTag("brew_method_dropdown"),
+                    )
+                    DropdownField(
+                        label = "咖啡豆",
+                        selectedLabel = selectedBean?.name,
+                        options = uiState.beans.map { DropdownOption(it.name, it.id) },
+                        onSelected = onBeanChange,
+                        modifier = Modifier.testTag("bean_dropdown"),
+                    )
+                    AnimatedVisibility(visible = selectedBean != null) {
+                        selectedBean?.let { bean ->
+                            BeanIdentityCard(
+                                name = bean.name,
+                                roastLevel = bean.roastLevel,
+                                processMethod = bean.processMethod,
+                                roaster = bean.roaster,
+                            )
+                        }
+                    }
+                    DropdownField(
+                        label = "磨豆机",
+                        selectedLabel = uiState.grinders.firstOrNull { it.id == uiState.objective.grinderProfileId }?.name,
+                        options = uiState.grinders.map { DropdownOption(it.name, it.id) },
+                        onSelected = onGrinderChange,
+                    )
+                    DateTimePickerField(
+                        label = "记录时间",
+                        valueMillis = uiState.objective.brewedAtMillis,
+                        onValueChange = { onBrewedAtChange(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    GrindDialField(
+                        label = selectedGrinder?.let { "${it.name} 刻度" } ?: "研磨格数",
+                        value = uiState.objective.grindSetting,
+                        onValueChange = onGrindSettingChange,
+                        minValue = selectedGrinder?.minSetting ?: 0.0,
+                        maxValue = selectedGrinder?.maxSetting ?: 40.0,
+                        step = selectedGrinder?.stepSize ?: 1.0,
+                        decimals = 1,
+                        referenceValue = uiState.referenceRecord?.grindSetting?.let(::formatNumber),
+                        normalizedValueText = normalizedGrindValue?.let(::formatNormalizedGrind),
+                    )
+                    InlineRulerField(
+                        label = "咖啡粉重量",
+                        value = uiState.objective.coffeeDoseG,
+                        onValueChange = onCoffeeDoseChange,
+                        minValue = 0.0,
+                        maxValue = 60.0,
+                        step = 0.5,
+                        decimals = 1,
+                        unit = "g",
+                        referenceValue = uiState.referenceRecord?.coffeeDoseG?.let { "${formatNumber(it)} g" },
+                    )
+                    SmartNumberControl(
+                        label = "萃取水量",
+                        value = uiState.objective.brewWaterMl,
+                        onValueChange = onBrewWaterChange,
+                        step = 5.0,
+                        quickValues = buildWaterQuickValuesForDose(
+                            doseText = uiState.objective.coffeeDoseG,
+                            ratios = listOf(14, 15, 16, 17),
+                        ),
+                        decimals = 0,
+                        referenceValue = uiState.referenceRecord?.brewWaterMl?.let { "${formatNumber(it)} ml" },
+                    )
+                    SmartNumberControl(
+                        label = "旁路水量",
+                        value = uiState.objective.bypassWaterMl,
+                        onValueChange = onBypassWaterChange,
+                        step = 5.0,
+                        quickValues = listOf("0", "20", "30", "40"),
+                        decimals = 0,
+                        referenceValue = uiState.referenceRecord?.bypassWaterMl?.let { "${formatNumber(it)} ml" },
+                    )
+                    SmartNumberControl(
+                        label = "水温",
+                        value = uiState.objective.waterTempC,
+                        onValueChange = onWaterTempChange,
+                        step = 1.0,
+                        quickValues = listOf("88", "90", "92", "94", "96"),
+                        decimals = 0,
+                        referenceValue = uiState.referenceRecord?.waterTempC?.let { "${formatNumber(it)} °C" },
+                    )
+                    SmartNumberControl(
+                        label = "冲煮时长",
+                        value = uiState.objective.brewDurationSeconds,
+                        onValueChange = onBrewDurationChange,
+                        step = 5.0,
+                        quickValues = listOf("120", "150", "180", "210"),
+                        decimals = 0,
+                        referenceValue = uiState.referenceRecord?.brewDurationSeconds?.let { "$it s" },
+                    )
+                    if (waterCurveDerivedValues != null) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            waterCurveDerivedValues.brewWaterMl?.let { StatChip(text = "萃取水 ${formatNumber(it)}ml") }
+                            waterCurveDerivedValues.bypassWaterMl?.let { StatChip(text = "旁路 ${formatNumber(it)}ml") }
+                            waterCurveDerivedValues.brewDurationSeconds?.let { StatChip(text = "时长 ${it}s") }
+                            normalizedGrindValue?.let { StatChip(text = "归一化 ${formatNormalizedGrind(it)}") }
+                        }
+                    }
+                    WaterCurveEditor(
+                        temperatureMode = uiState.objective.waterCurveTemperatureMode,
+                        onTemperatureModeChange = onWaterCurveTemperatureModeChange,
+                        ambientTempText = uiState.objective.waterCurveAmbientTempC,
+                        onAmbientTempChange = onWaterCurveAmbientTempChange,
+                        containerType = uiState.objective.waterCurveContainerType,
+                        onContainerTypeChange = onWaterCurveContainerTypeChange,
+                        stages = uiState.objective.waterCurveStages,
+                        onStageChange = onWaterCurveStageChange,
+                        onAddStage = onAddWaterCurveStage,
+                        onMoveStageUp = onMoveWaterCurveStageUp,
+                        onMoveStageDown = onMoveWaterCurveStageDown,
+                        onRemoveStage = onRemoveWaterCurveStage,
+                        previewCurve = waterCurveResult.curve,
+                        derivedValues = waterCurveDerivedValues,
+                        analysis = waterCurveAnalysis,
+                        legacySummary = uiState.objective.legacyWaterCurveSummary,
+                    )
+                    OutlinedTextField(
+                        value = uiState.objective.notes,
+                        onValueChange = onObjectiveNotesChange,
+                        label = { Text("备注") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            } else {
+                SectionCard(title = "主观感受") {
+                    TastingScorePanel(
+                        scores = tastingScoreItems,
+                        onScoreSelected = { key, score ->
+                            when (key) {
+                                "overall" -> onOverallChange(score)
+                                "aroma" -> onAromaChange(score)
+                                "acidity" -> onAcidityChange(score)
+                                "sweetness" -> onSweetnessChange(score)
+                                "bitterness" -> onBitternessChange(score)
+                                "body" -> onBodyChange(score)
+                                "aftertaste" -> onAftertasteChange(score)
+                            }
+                        },
+                        modifier = Modifier.testTag(QoffeeTestTags.RECORD_EDITOR_TASTING_PANEL),
+                    )
+                    TagSelector(
+                        tags = uiState.flavorTags.map { it.name },
+                        selected = uiState.subjective.tags.map { it.name }.toSet(),
+                        onToggle = { name ->
+                            uiState.flavorTags.firstOrNull { it.name == name }?.let(onToggleTag)
+                        },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = customTag,
+                            onValueChange = { customTag = it },
+                            label = { Text("自定义风味标签") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                        )
+                        Button(
+                            onClick = {
+                                val normalizedTag = customTag.trim()
+                                if (normalizedTag.isNotBlank()) {
+                                    onAddCustomTag(normalizedTag)
+                                    customTag = ""
+                                }
+                            },
+                            enabled = customTag.isNotBlank(),
+                        ) {
+                            Text("添加")
+                        }
+                    }
+                    OutlinedTextField(
+                        value = uiState.subjective.notes,
+                        onValueChange = onSubjectiveNotesChange,
+                        label = { Text("主观备注") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                SectionCard(title = "提交前检查") {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        uiState.objective.recipeNameSnapshot?.let {
+                            StatChip(text = "配方 $it")
+                        }
+                        uiState.subjective.overall?.let {
+                            StatChip(text = "评分 $it / 5")
+                        }
+                    }
+                    uiState.referenceRecord?.let { reference ->
+                        val comparison = buildComparisonSummary(uiState.record ?: reference, reference)
+                        Text(text = comparison.headline, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = comparison.details.joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (uiState.validationErrors.isNotEmpty()) {
+                        uiState.validationErrors.forEach { error ->
+                            Text(
+                                text = "• $error",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1418,14 +1613,14 @@ private fun editorSubtitle(uiState: RecordEditorUiState): String {
     val beanName = uiState.record?.beanNameSnapshot
     return when {
         uiState.entry == RecordEditorEntry.RECIPE && !uiState.objective.recipeNameSnapshot.isNullOrBlank() ->
-            "已从配方 ${uiState.objective.recipeNameSnapshot} 预填客观参数。"
+            "已按配方 ${uiState.objective.recipeNameSnapshot} 预填，可直接微调。"
         uiState.entry == RecordEditorEntry.DUPLICATE && uiState.sourceRecord != null ->
-            "已复制 ${uiState.sourceRecord.beanNameSnapshot ?: "上一杯"} 的参数与标签，可在此基础上微调。"
+            "已复制 ${uiState.sourceRecord.beanNameSnapshot ?: "上一杯"} 的参数与标签，可按本次情况调整。"
         uiState.entry == RecordEditorEntry.BEAN && !beanName.isNullOrBlank() ->
-            "已为你预填豆子 $beanName，现在可以直接补齐其余客观参数。"
+            "已预填豆子 $beanName，补齐其余客观参数即可。"
         uiState.entry == RecordEditorEntry.DRAFT ->
-            "回到未完成的草稿，继续补完整体客观与主观信息。"
-        else -> "先完成客观参数，再补主观感受，整个过程都会自动保存。"
+            "已恢复未完成草稿，可继续填写。"
+        else -> "先填客观参数，再补主观感受，全程自动保存。"
     }
 }
 

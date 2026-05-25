@@ -1,5 +1,8 @@
 package com.qoffee.data.repository
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
 import com.qoffee.core.common.TimeProvider
 import com.qoffee.core.model.BeanInventory
 import com.qoffee.core.model.BrewMethod
@@ -8,6 +11,7 @@ import com.qoffee.core.model.BrewStage
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.EntitlementTier
 import com.qoffee.core.model.Experiment
+import com.qoffee.core.model.ExperimentProject
 import com.qoffee.core.model.ExperimentRun
 import com.qoffee.core.model.ExperimentStatus
 import com.qoffee.core.model.GuideTemplate
@@ -414,6 +418,8 @@ class EntitlementRepositoryImpl @Inject constructor() : EntitlementRepository {
     )
 
     override fun observeEntitlements(): Flow<UserEntitlements> = flowOf(entitlements)
+
+    override suspend fun setPreviewTier(tier: EntitlementTier) = Unit
 }
 
 @Singleton

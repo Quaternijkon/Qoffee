@@ -1,7 +1,6 @@
 package com.qoffee.feature.records
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +11,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -32,22 +33,20 @@ import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.analyze
 import com.qoffee.core.model.deriveValues
 import com.qoffee.core.model.formatNormalizedGrind
-import com.qoffee.domain.repository.RecordRepository
 import com.qoffee.domain.repository.GuideRepository
+import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.ui.QoffeeTestTags
 import com.qoffee.ui.components.DashboardPage
 import com.qoffee.ui.components.EmptyStateCard
 import com.qoffee.ui.components.GrindNormalizationChart
 import com.qoffee.ui.components.LabeledValue
-import com.qoffee.ui.components.MetricCard
-import com.qoffee.ui.components.PageHeader
+import com.qoffee.ui.components.RecordReportHeader
 import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.StatChip
 import com.qoffee.ui.components.WaterCurveChart
 import com.qoffee.ui.components.WaterCurveSummaryList
 import com.qoffee.ui.navigation.QoffeeDestinations
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -156,283 +155,6 @@ fun RecordDetailRoute(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RecordDetailScreenLegacy(
-    paddingValues: PaddingValues,
-    uiState: RecordDetailUiState,
-    isReadOnlyArchive: Boolean,
-    reviewContext: String?,
-    onBack: () -> Unit,
-    onEdit: (Long) -> Unit,
-    onDuplicate: (Long) -> Unit,
-    onDelete: () -> Unit,
-    onSaveAsRecipe: (String) -> Unit,
-    onOverwriteSourceRecipe: () -> Unit,
-    onCreateGuide: () -> Unit,
-) {
-    RecordDetailScreen(
-        paddingValues = paddingValues,
-        uiState = uiState,
-        isReadOnlyArchive = isReadOnlyArchive,
-        reviewContext = reviewContext,
-        onBack = onBack,
-        onEdit = onEdit,
-        onDuplicate = onDuplicate,
-        onDelete = onDelete,
-        onSaveAsRecipe = onSaveAsRecipe,
-        onOverwriteSourceRecipe = onOverwriteSourceRecipe,
-        onCreateGuide = onCreateGuide,
-    )
-    return
-    /*
-    val record = uiState.record
-    if (record == null) {
-        EmptyStateCard(
-            title = "未找到这条记录",
-            subtitle = "这条记录可能仍在加载，或已经被删除。",
-            modifier = Modifier.padding(paddingValues),
-        )
-        return
-    }
-
-    val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-    var showSaveRecipeDialog by remember { mutableStateOf(false) }
-
-    DashboardPage(paddingValues = paddingValues) {
-        PageHeader(
-            title = record.beanNameSnapshot ?: (record.brewMethod?.displayName ?: "咖啡记录"),
-            subtitle = "${record.brewMethod?.displayName ?: "未指定方式"} · ${formatter.format(Date(record.brewedAt))}",
-            eyebrow = "QOFFEE / CUP REPORT",
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack) { Text("返回") }
-            if (!isReadOnlyArchive) {
-                Button(onClick = { onEdit(record.id) }) { Text("编辑") }
-            }
-        }
-
-        reviewContext?.takeIf { it.isNotBlank() }?.let { contextText ->
-            SectionCard(
-                title = "复盘上下文",
-                subtitle = "你是从复盘看板进入这条样本的，返回后会保留原来的筛选与分段。",
-            ) {
-                Text(
-                    text = contextText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        SectionCard(
-            title = "复盘摘要",
-            subtitle = "先看总分、粉水比和关键标签，再决定是否值得复做。",
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricCard(
-                    label = "总体评分",
-                    value = record.subjectiveEvaluation?.overall?.let { "$it/5" } ?: "--",
-                    supporting = "统一按 5 分制展示",
-                    modifier = Modifier.weight(1f),
-                )
-                MetricCard(
-                    label = "粉水比",
-                    value = record.brewRatio?.let(::formatNumber) ?: "--",
-                    supporting = "当前记录的客观比值",
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                record.brewMethod?.let { StatChip(text = it.displayName) }
-                record.beanRoastLevelSnapshot?.let { StatChip(text = it.displayName) }
-                record.beanProcessMethodSnapshot?.let { StatChip(text = it.displayName) }
-                record.recipeNameSnapshot?.let { StatChip(text = "配方 $it") }
-                record.grinderNameSnapshot?.let { StatChip(text = it) }
-            }
-        }
-
-        SectionCard(
-            title = "客观参数",
-            subtitle = "把这杯的记录快照集中展示，方便和复盘结论对应起来。",
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "咖啡豆", value = record.beanNameSnapshot.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "磨豆机", value = record.grinderNameSnapshot.orEmpty(), modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "粉量", value = record.coffeeDoseG?.let { "${formatNumber(it)} g" }.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "水量", value = record.brewWaterMl?.let { "${formatNumber(it)} ml" }.orEmpty(), modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "水温", value = record.waterTempC?.let { "${formatNumber(it)} °C" }.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "研磨", value = record.grindSetting?.let(::formatNumber).orEmpty(), modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "总水量", value = record.totalWaterMl?.let { "${formatNumber(it)} ml" }.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "时长", value = record.brewDurationSeconds?.let { "${it}s" }.orEmpty(), modifier = Modifier.weight(1f))
-            }
-            if (record.notes.isNotBlank()) {
-                Text(
-                    text = record.notes,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        SectionCard(
-            title = "主观感受",
-            subtitle = "把维度评分、风味标签和文字备注统一到同一个复盘区域。",
-        ) {
-            val evaluation = record.subjectiveEvaluation
-            if (evaluation == null || evaluation.isEmpty()) {
-                Text(
-                    text = "这条记录还没有填写主观感受。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LabeledValue(label = "香气", value = evaluation.aroma?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "酸质", value = evaluation.acidity?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "甜感", value = evaluation.sweetness?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LabeledValue(label = "苦感", value = evaluation.bitterness?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "醇厚", value = evaluation.body?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                    LabeledValue(label = "余韵", value = evaluation.aftertaste?.toString().orEmpty(), modifier = Modifier.weight(1f))
-                }
-                if (evaluation.flavorTags.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        evaluation.flavorTags.forEach { tag -> StatChip(text = tag.name) }
-                    }
-                }
-                if (evaluation.notes.isNotBlank()) {
-                    Text(
-                        text = evaluation.notes,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        if (!isReadOnlyArchive) {
-            SectionCard(
-                title = "如何复用这条记录",
-                subtitle = "记录是核心对象，配方只是它的客观参数复用版本。",
-            ) {
-                OutlinedButton(
-                    onClick = { showSaveRecipeDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("设为配方")
-                }
-                if (record.recipeTemplateId != null && !record.recipeNameSnapshot.isNullOrBlank()) {
-                    OutlinedButton(
-                        onClick = onOverwriteSourceRecipe,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("覆盖原配方")
-                    }
-                }
-                Button(
-                    onClick = { onDuplicate(record.id) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("再冲一杯")
-                }
-            }
-        }
-
-        uiState.comparison?.let { comparison ->
-            SectionCard(
-                title = "与上一杯相比",
-                subtitle = "快速判断本次参数调整是否产生了正向变化。",
-            ) {
-                Text(
-                    text = comparison.headline,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = comparison.details.joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        uiState.beanHistorySummary?.let { summary ->
-            SectionCard(
-                title = "同豆历史表现",
-                subtitle = "把同一支豆子的长期表现放回这次复盘语境里。",
-            ) {
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        if (!isReadOnlyArchive) {
-            SectionCard(
-                title = "记录管理",
-                subtitle = "删除操作不可撤销，建议先确认这条样本不再需要。",
-            ) {
-                OutlinedButton(onClick = { showDeleteConfirm = true }) {
-                    Text("删除这条记录")
-                }
-            }
-        }
-    }
-
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("删除记录") },
-            text = { Text("这会永久删除当前记录及其主观评价，确认继续吗？") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteConfirm = false
-                        onDelete()
-                    },
-                ) {
-                    Text("确认删除")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showDeleteConfirm = false }) {
-                    Text("取消")
-                }
-            },
-        )
-    }
-
-    if (showSaveRecipeDialog) {
-        SaveRecordAsRecipeDialog(
-            initialName = record.recipeNameSnapshot ?: buildDefaultRecipeName(record),
-            onDismiss = { showSaveRecipeDialog = false },
-            onConfirm = { name ->
-                onSaveAsRecipe(name)
-                showSaveRecipeDialog = false
-            },
-        )
-    }
-    */
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
 private fun RecordDetailScreen(
     paddingValues: PaddingValues,
     uiState: RecordDetailUiState,
@@ -456,7 +178,7 @@ private fun RecordDetailScreen(
         return
     }
 
-    val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA) }
+    val report = remember(record) { buildRecordReport(record) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showSaveRecipeDialog by remember { mutableStateOf(false) }
     val waterCurveDerivedValues = record.waterCurve?.deriveValues(record.coffeeDoseG)
@@ -473,16 +195,56 @@ private fun RecordDetailScreen(
     )
 
     DashboardPage(paddingValues = paddingValues) {
-        PageHeader(
-            title = record.beanNameSnapshot ?: (record.brewMethod?.displayName ?: "咖啡记录"),
-            subtitle = "${record.brewMethod?.displayName ?: "未指定方式"} · ${formatter.format(Date(record.brewedAt))}",
-            eyebrow = "QOFFEE / CUP REPORT",
+        OutlinedButton(onClick = onBack) {
+            Text("返回")
+        }
+
+        RecordReportHeader(
+            title = report.title,
+            subtitle = report.subtitle,
+            scoreText = report.scoreText,
+            parameters = report.parameters,
+            modifier = Modifier.testTag(QoffeeTestTags.RECORD_REPORT_HEADER),
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack) { Text("返回") }
-            if (!isReadOnlyArchive) {
-                Button(onClick = { onEdit(record.id) }) { Text("编辑") }
+        if (!isReadOnlyArchive) {
+            SectionCard(
+                title = "下一步",
+                subtitle = "把这杯直接变成下一次行动。",
+                modifier = Modifier.testTag(QoffeeTestTags.RECORD_REPORT_REUSE_ACTIONS),
+            ) {
+                Button(
+                    onClick = { onDuplicate(record.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(RecordReuseAction.DUPLICATE.label)
+                }
+                OutlinedButton(
+                    onClick = { showSaveRecipeDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(RecordReuseAction.SAVE_AS_RECIPE.label)
+                }
+                if (record.recipeTemplateId != null && !record.recipeNameSnapshot.isNullOrBlank()) {
+                    OutlinedButton(
+                        onClick = onOverwriteSourceRecipe,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(RecordReuseAction.OVERWRITE_RECIPE.label)
+                    }
+                }
+                OutlinedButton(
+                    onClick = onCreateGuide,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(RecordReuseAction.CREATE_GUIDE.label)
+                }
+                OutlinedButton(
+                    onClick = { onEdit(record.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(RecordReuseAction.EDIT.label)
+                }
             }
         }
 
@@ -500,54 +262,24 @@ private fun RecordDetailScreen(
         }
 
         SectionCard(
-            title = "复盘摘要",
-            subtitle = "先看总分、粉水比和关键标签，再决定是否值得复做。",
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricCard(
-                    label = "总体评分",
-                    value = record.subjectiveEvaluation?.overall?.let { "$it/5" } ?: "--",
-                    supporting = "统一按 5 分制展示",
-                    modifier = Modifier.weight(1f),
-                )
-                MetricCard(
-                    label = "粉水比",
-                    value = record.brewRatio?.let(::formatNumber) ?: "--",
-                    supporting = "当前记录的客观比值",
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                record.brewMethod?.let { StatChip(text = it.displayName) }
-                record.beanRoastLevelSnapshot?.let { StatChip(text = it.displayName) }
-                record.beanProcessMethodSnapshot?.let { StatChip(text = it.displayName) }
-                record.recipeNameSnapshot?.let { StatChip(text = "配方 $it") }
-                record.grinderNameSnapshot?.let { StatChip(text = it) }
-            }
-        }
-
-        SectionCard(
             title = "客观参数",
             subtitle = "把这杯的记录快照集中展示，方便和复盘结论对应起来。",
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "咖啡豆", value = record.beanNameSnapshot.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "磨豆机", value = record.grinderNameSnapshot.orEmpty(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "咖啡豆", value = record.beanNameSnapshot.orUnknown(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "研磨机", value = record.grinderNameSnapshot.orUnknown(), modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "粉量", value = record.coffeeDoseG?.let { "${formatNumber(it)} g" }.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "萃取水", value = record.brewWaterMl?.let { "${formatNumber(it)} ml" }.orEmpty(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "粉量", value = record.coffeeDoseG.formatUnit("g"), modifier = Modifier.weight(1f))
+                LabeledValue(label = "萃取水量", value = record.brewWaterMl.formatUnit("ml"), modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "水温", value = record.waterTempC?.let { "${formatNumber(it)} °C" }.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "研磨", value = record.grindSetting?.let(::formatNumber).orEmpty(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "总水量", value = record.totalWaterMl.formatUnit("ml"), modifier = Modifier.weight(1f))
+                LabeledValue(label = "水温", value = record.waterTempC.formatUnit("°C"), modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LabeledValue(label = "总水量", value = record.totalWaterMl?.let { "${formatNumber(it)} ml" }.orEmpty(), modifier = Modifier.weight(1f))
-                LabeledValue(label = "时长", value = record.brewDurationSeconds?.let { "${it}s" }.orEmpty(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "研磨", value = record.grindSetting.formatPlain(), modifier = Modifier.weight(1f))
+                LabeledValue(label = "时长", value = record.brewDurationSeconds.formatDurationLabel(), modifier = Modifier.weight(1f))
             }
             record.normalizedGrindSetting?.let {
                 LabeledValue(label = "归一化研磨", value = formatNormalizedGrind(it), modifier = Modifier.fillMaxWidth())
@@ -563,8 +295,8 @@ private fun RecordDetailScreen(
 
         record.waterCurve?.let { curve ->
             SectionCard(
-                title = "冲煮多曲线",
-                subtitle = "把这杯的注水、系统温度和咖啡因估算放到同一时间轴里，方便复盘节奏与热量变化。",
+                title = "冲煮曲线",
+                subtitle = "在同一时间轴查看注水与温度变化。",
             ) {
                 WaterCurveChart(
                     curve = curve,
@@ -582,10 +314,10 @@ private fun RecordDetailScreen(
         if (grindCurve != null) {
             SectionCard(
                 title = "研磨归一化",
-                subtitle = "把这台磨豆机的原始格数映射到统一的 0~1 坐标里，方便跨设备对比。",
+                subtitle = "把原始格数映射到统一 0~1 坐标。",
             ) {
                 record.normalizedGrindSetting?.let {
-                    StatChip(text = "当前 ${record.grindSetting?.let(::formatNumber) ?: "--"} → ${formatNormalizedGrind(it)}")
+                    StatChip(text = "当前 ${record.grindSetting?.let(::formatNumber) ?: "--"} -> ${formatNormalizedGrind(it)}")
                 }
                 GrindNormalizationChart(curve = grindCurve)
             }
@@ -593,7 +325,7 @@ private fun RecordDetailScreen(
 
         SectionCard(
             title = "主观感受",
-            subtitle = "把维度评分、风味标签和文字备注统一到同一个复盘区域。",
+            subtitle = "集中查看评分、标签与备注。",
         ) {
             val evaluation = record.subjectiveEvaluation
             if (evaluation == null || evaluation.isEmpty()) {
@@ -631,44 +363,10 @@ private fun RecordDetailScreen(
             }
         }
 
-        if (!isReadOnlyArchive) {
-            SectionCard(
-                title = "如何复用这条记录",
-                subtitle = "记录是核心对象，配方只是它的客观参数复用版本。",
-            ) {
-                OutlinedButton(
-                    onClick = { showSaveRecipeDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("设为配方")
-                }
-                if (record.recipeTemplateId != null && !record.recipeNameSnapshot.isNullOrBlank()) {
-                    OutlinedButton(
-                        onClick = onOverwriteSourceRecipe,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("覆盖原配方")
-                    }
-                }
-                Button(
-                    onClick = { onDuplicate(record.id) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("再冲一杯")
-                }
-                OutlinedButton(
-                    onClick = onCreateGuide,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("设为指导")
-                }
-            }
-        }
-
         uiState.comparison?.let { comparison ->
             SectionCard(
                 title = "与上一杯相比",
-                subtitle = "快速判断本次参数调整是否产生了正向变化。",
+                subtitle = "快速判断本次调整是否有效。",
             ) {
                 Text(
                     text = comparison.headline,
@@ -676,7 +374,7 @@ private fun RecordDetailScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = comparison.details.joinToString(" 路 "),
+                    text = comparison.details.joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -686,7 +384,7 @@ private fun RecordDetailScreen(
         uiState.beanHistorySummary?.let { summary ->
             SectionCard(
                 title = "同豆历史表现",
-                subtitle = "把同一支豆子的长期表现放回这次复盘语境里。",
+                subtitle = "查看同一支豆子的长期表现。",
             ) {
                 Text(
                     text = summary,
@@ -699,7 +397,7 @@ private fun RecordDetailScreen(
         if (!isReadOnlyArchive) {
             SectionCard(
                 title = "记录管理",
-                subtitle = "删除操作不可撤销，建议先确认这条样本不再需要。",
+                subtitle = "删除后不可恢复，建议只在确认不再需要这条样本时操作。",
             ) {
                 OutlinedButton(onClick = { showDeleteConfirm = true }) {
                     Text("删除这条记录")
@@ -743,6 +441,25 @@ private fun RecordDetailScreen(
     }
 }
 
+private fun Double?.formatUnit(unit: String): String {
+    return this?.let { "${formatNumber(it)}$unit" } ?: "未记录"
+}
+
+private fun Double?.formatPlain(): String {
+    return this?.let(::formatNumber) ?: "未记录"
+}
+
+private fun Int?.formatDurationLabel(): String {
+    val value = this ?: return "未记录"
+    val minutes = value / 60
+    val seconds = value % 60
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
+}
+
+private fun String?.orUnknown(): String {
+    return this?.takeIf { it.isNotBlank() } ?: "未记录"
+}
+
 private fun formatNumber(value: Double): String {
     return String.format(Locale.CHINA, "%.1f", value).trimEnd('0').trimEnd('.')
 }
@@ -758,7 +475,7 @@ private fun SaveRecordAsRecipeDialog(
         onDismissRequest = onDismiss,
         title = { Text("设为配方") },
         text = {
-            androidx.compose.material3.OutlinedTextField(
+            OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text("配方名称") },

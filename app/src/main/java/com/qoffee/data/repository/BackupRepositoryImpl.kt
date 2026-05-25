@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import com.qoffee.core.common.TimeProvider
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
+import com.qoffee.core.model.AppThemeStyle
 import com.qoffee.core.model.ArchiveType
 import com.qoffee.core.model.CoffeeRecord
 import com.qoffee.core.model.FileExportPayload
@@ -81,6 +82,7 @@ class BackupRepositoryImpl @Inject constructor(
                 prefs[PreferenceKeys.SHOW_CONFIDENCE] = snapshot.preferences.showInsightConfidence
                 prefs[PreferenceKeys.DEFAULT_ANALYSIS_RANGE] = snapshot.preferences.defaultAnalysisTimeRange
                 prefs[PreferenceKeys.SHOW_LEARN_IN_DOCK] = snapshot.preferences.showLearnInDock
+                prefs[PreferenceKeys.THEME_STYLE] = snapshot.preferences.themeStyle
 
                 if (importPlan.restoredCurrentArchiveId != null) {
                     prefs[PreferenceKeys.CURRENT_ARCHIVE_ID] = importPlan.restoredCurrentArchiveId
@@ -152,6 +154,7 @@ class BackupRepositoryImpl @Inject constructor(
                 defaultBeanProfileId = prefs[PreferenceKeys.DEFAULT_BEAN_ID],
                 defaultGrinderProfileId = prefs[PreferenceKeys.DEFAULT_GRINDER_ID],
                 showLearnInDock = prefs[PreferenceKeys.SHOW_LEARN_IN_DOCK] ?: false,
+                themeStyle = prefs[PreferenceKeys.THEME_STYLE] ?: AppThemeStyle.CLASSIC.name,
             ),
             archives = editableArchives.map { archive ->
                 BackupArchive(
@@ -345,6 +348,7 @@ internal data class BackupPreferences(
     val defaultBeanProfileId: Long?,
     val defaultGrinderProfileId: Long?,
     val showLearnInDock: Boolean,
+    val themeStyle: String,
 )
 
 internal data class BackupArchive(
@@ -452,6 +456,7 @@ internal object BackupJsonCodec {
         putNullable("defaultBeanProfileId", defaultBeanProfileId)
         putNullable("defaultGrinderProfileId", defaultGrinderProfileId)
         put("showLearnInDock", showLearnInDock)
+        put("themeStyle", themeStyle)
     }
 
     private fun BackupArchive.toJson(): JSONObject = JSONObject().apply {
@@ -575,6 +580,7 @@ internal object BackupJsonCodec {
             defaultBeanProfileId = optNullableLong("defaultBeanProfileId"),
             defaultGrinderProfileId = optNullableLong("defaultGrinderProfileId"),
             showLearnInDock = optBoolean("showLearnInDock", false),
+            themeStyle = optString("themeStyle", AppThemeStyle.CLASSIC.name),
         )
     }
 

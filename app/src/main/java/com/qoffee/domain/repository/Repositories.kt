@@ -1,8 +1,10 @@
 package com.qoffee.domain.repository
 
 import com.qoffee.core.model.AnalyticsDashboard
+import com.qoffee.core.model.AnalyticsReport
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
+import com.qoffee.core.model.AppThemeStyle
 import com.qoffee.core.model.ArchiveSeedStatus
 import com.qoffee.core.model.ArchiveSummary
 import com.qoffee.core.model.BeanProfile
@@ -29,7 +31,13 @@ import com.qoffee.core.model.RecordPrefillSource
 import com.qoffee.core.model.DraftReplacePolicy
 import com.qoffee.core.model.FileExportPayload
 import com.qoffee.core.model.RestoreOutcome
+import com.qoffee.core.model.ServerEnvironment
 import com.qoffee.core.model.ShareCard
+import com.qoffee.core.model.AiCoachSuggestion
+import com.qoffee.core.model.EntitlementTier
+import com.qoffee.core.model.SyncConflictResolution
+import com.qoffee.core.model.SyncOperationResult
+import com.qoffee.core.model.SyncState
 import com.qoffee.core.model.SubjectiveEvaluation
 import com.qoffee.core.model.TroubleshootingItem
 import com.qoffee.core.model.UserEntitlements
@@ -97,6 +105,8 @@ interface RecordRepository {
 
 interface AnalyticsRepository {
     fun observeDashboard(filter: AnalysisFilter): Flow<AnalyticsDashboard>
+    fun observeReport(filter: AnalysisFilter): Flow<AnalyticsReport>
+    suspend fun exportReportMarkdown(filter: AnalysisFilter): FileExportPayload
 }
 
 interface PreferenceRepository {
@@ -107,6 +117,8 @@ interface PreferenceRepository {
     suspend fun setDefaultBeanProfile(beanId: Long?)
     suspend fun setDefaultGrinderProfile(grinderId: Long?)
     suspend fun setShowLearnInDock(enabled: Boolean)
+    suspend fun setThemeStyle(style: AppThemeStyle)
+    suspend fun setServerEnvironment(environment: ServerEnvironment)
 }
 
 interface SessionRepository {
@@ -150,10 +162,27 @@ interface GuideRepository {
 
 interface EntitlementRepository {
     fun observeEntitlements(): Flow<UserEntitlements>
+    suspend fun setPreviewTier(tier: EntitlementTier)
 }
 
 interface ShareRepository {
     fun observeShareCards(): Flow<List<ShareCard>>
+}
+
+interface SyncRepository {
+    fun observeSyncState(): Flow<SyncState>
+    suspend fun registerWithEmail(email: String, password: String): SyncOperationResult
+    suspend fun signInWithEmail(email: String, password: String): SyncOperationResult
+    suspend fun signInWithEmail(email: String): SyncOperationResult
+    suspend fun signOut(): SyncOperationResult
+    suspend fun pushChanges(): SyncOperationResult
+    suspend fun pullChanges(): SyncOperationResult
+    suspend fun createSnapshot(): SyncOperationResult
+    suspend fun resolveConflict(conflictId: String, resolution: SyncConflictResolution): SyncOperationResult
+}
+
+interface AiCoachRepository {
+    fun observeSuggestions(): Flow<List<AiCoachSuggestion>>
 }
 
 interface BackupRepository {

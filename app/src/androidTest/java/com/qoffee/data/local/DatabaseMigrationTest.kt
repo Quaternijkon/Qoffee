@@ -1,6 +1,5 @@
 package com.qoffee.data.local
 
-import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -126,12 +125,12 @@ class DatabaseMigrationTest {
             close()
         }
 
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val database = Room.databaseBuilder(context, QoffeeDatabase::class.java, databaseName)
-            .addMigrations(QoffeeDatabaseMigrations.MIGRATION_3_4)
-            .build()
-
-        database.openHelper.writableDatabase.apply {
+        helper.runMigrationsAndValidate(
+            databaseName,
+            4,
+            true,
+            QoffeeDatabaseMigrations.MIGRATION_3_4,
+        ).apply {
             val beanCursor = query("SELECT initialStockG FROM bean_profiles WHERE id = 1")
             assertTrue(beanCursor.moveToFirst())
             assertTrue(beanCursor.isNull(0))
@@ -155,7 +154,6 @@ class DatabaseMigrationTest {
             scoreCursor.close()
             close()
         }
-        database.close()
     }
 
     @Test
@@ -166,7 +164,7 @@ class DatabaseMigrationTest {
             execSQL(
                 """
                 INSERT INTO archives (id, name, typeCode, isReadOnly, createdAt, updatedAt, sortOrder)
-                VALUES (1, '涓诲瓨妗?, 'normal', 0, 1000, 1000, 0)
+                VALUES (1, 'Main Archive', 'normal', 0, 1000, 1000, 0)
                 """.trimIndent(),
             )
             execSQL(

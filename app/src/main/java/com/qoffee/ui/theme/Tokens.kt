@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.qoffee.core.model.AppThemeStyle
 
 @Immutable
 data class QoffeeDashboardColors(
@@ -33,12 +34,12 @@ data class QoffeeDashboardColors(
 
 @Immutable
 data class QoffeeSpacing(
-    val pageHorizontal: Dp = 20.dp,
-    val pageVertical: Dp = 20.dp,
-    val section: Dp = 18.dp,
-    val block: Dp = 14.dp,
-    val item: Dp = 10.dp,
-    val chip: Dp = 8.dp,
+    val pageHorizontal: Dp = 16.dp,
+    val pageVertical: Dp = 14.dp,
+    val section: Dp = 12.dp,
+    val block: Dp = 10.dp,
+    val item: Dp = 8.dp,
+    val chip: Dp = 6.dp,
 )
 
 private val LocalDashboardColors = staticCompositionLocalOf<QoffeeDashboardColors> {
@@ -47,26 +48,28 @@ private val LocalDashboardColors = staticCompositionLocalOf<QoffeeDashboardColor
 
 private val LocalDashboardSpacing = staticCompositionLocalOf { QoffeeSpacing() }
 
+private val LocalDashboardThemeStyle = staticCompositionLocalOf { AppThemeStyle.CLASSIC }
+
 internal val LightDashboardColors = QoffeeDashboardColors(
-    pageTop = Color(0xFFF7EDE2),
-    pageBottom = Color(0xFFECE0D4),
-    ambientGlow = Copper.copy(alpha = 0.28f),
-    ambientGlowSecondary = Sage.copy(alpha = 0.18f),
-    panel = Color(0xFFF7F0E7),
-    panelMuted = Color(0xFFF1E6DA),
-    panelStrong = Color(0xFFEEE0D0),
-    panelStroke = Color(0xFFD9C6B1),
-    panelStrokeStrong = Color(0xFFC9B198),
-    accentSoft = Color(0xFFEAD4BC),
-    accentGlow = Copper.copy(alpha = 0.22f),
-    success = Forest,
-    warning = Ember,
-    shell = Color(0xFFF1E6DA),
-    shellElevated = Color(0xFFF7EFE5),
-    shellDivider = Color(0xFFD1BCA5),
-    titleText = Onyx,
-    titleShadow = CopperMuted.copy(alpha = 0.16f),
-    titleScrim = Color(0xFFFFFBF7).copy(alpha = 0.54f),
+    pageTop = Paper,
+    pageBottom = Color(0xFFF0F3F5),
+    ambientGlow = Marine.copy(alpha = 0.08f),
+    ambientGlowSecondary = Copper.copy(alpha = 0.10f),
+    panel = Porcelain,
+    panelMuted = Color(0xFFF3F6F7),
+    panelStrong = Color(0xFFEAF1F2),
+    panelStroke = Mist,
+    panelStrokeStrong = Marine.copy(alpha = 0.28f),
+    accentSoft = MarineSoft,
+    accentGlow = Copper.copy(alpha = 0.14f),
+    success = Pine,
+    warning = CopperMuted,
+    shell = Porcelain,
+    shellElevated = Color(0xFFF8FAFA),
+    shellDivider = Mist,
+    titleText = Ink,
+    titleShadow = Marine.copy(alpha = 0.08f),
+    titleScrim = Porcelain.copy(alpha = 0.84f),
 )
 
 internal val DarkDashboardColors = QoffeeDashboardColors(
@@ -91,22 +94,75 @@ internal val DarkDashboardColors = QoffeeDashboardColors(
     titleScrim = Color(0xFF0C0A08).copy(alpha = 0.42f),
 )
 
+internal val MinimalLightDashboardColors = QoffeeDashboardColors(
+    pageTop = Color(0xFFF7F9FC),
+    pageBottom = Color(0xFFFFFFFF),
+    ambientGlow = Color.Transparent,
+    ambientGlowSecondary = Color.Transparent,
+    panel = Color(0xFFFFFFFF),
+    panelMuted = Color(0xFFF3F6FB),
+    panelStrong = Color(0xFFEEF4FF),
+    panelStroke = Color(0xFFE0E5EC),
+    panelStrokeStrong = GoogleBlueRefined.copy(alpha = 0.22f),
+    accentSoft = GoogleBlueSoft,
+    accentGlow = GoogleBlueRefined.copy(alpha = 0.10f),
+    success = GoogleGreenRefined,
+    warning = GoogleYellowRefined,
+    shell = Color(0xFFFFFFFF),
+    shellElevated = Color(0xFFFAFBFF),
+    shellDivider = Color(0xFFE1E6EE),
+    titleText = Color(0xFF202124),
+    titleShadow = GoogleBlueRefined.copy(alpha = 0.06f),
+    titleScrim = Color(0xFFFFFFFF).copy(alpha = 0.90f),
+)
+
+internal val MinimalDarkDashboardColors = QoffeeDashboardColors(
+    pageTop = Color(0xFF101318),
+    pageBottom = Color(0xFF131821),
+    ambientGlow = Color.Transparent,
+    ambientGlowSecondary = Color.Transparent,
+    panel = Color(0xFF171B22),
+    panelMuted = Color(0xFF1F2630),
+    panelStrong = Color(0xFF243044),
+    panelStroke = Color(0xFF313946),
+    panelStrokeStrong = GoogleBlueDark.copy(alpha = 0.36f),
+    accentSoft = Color(0xFF17345F),
+    accentGlow = GoogleBlueDark.copy(alpha = 0.16f),
+    success = GoogleGreenDark,
+    warning = GoogleYellowDark,
+    shell = Color(0xFF11151B),
+    shellElevated = Color(0xFF171B22),
+    shellDivider = Color(0xFF2E3642),
+    titleText = Color(0xFFE8EAED),
+    titleShadow = Color.Transparent,
+    titleScrim = Color(0xFF11151B).copy(alpha = 0.78f),
+)
+
 object QoffeeDashboardTheme {
     val colors: QoffeeDashboardColors
         @Composable get() = LocalDashboardColors.current
 
     val spacing: QoffeeSpacing
         @Composable get() = LocalDashboardSpacing.current
+
+    val themeStyle: AppThemeStyle
+        @Composable get() = LocalDashboardThemeStyle.current
 }
 
 @Composable
 internal fun ProvideQoffeeDashboardTokens(
     darkTheme: Boolean,
+    themeStyle: AppThemeStyle,
     content: @Composable () -> Unit,
 ) {
+    val colors = when (themeStyle) {
+        AppThemeStyle.CLASSIC -> if (darkTheme) DarkDashboardColors else LightDashboardColors
+        AppThemeStyle.MINIMAL -> if (darkTheme) MinimalDarkDashboardColors else MinimalLightDashboardColors
+    }
     androidx.compose.runtime.CompositionLocalProvider(
-        LocalDashboardColors provides if (darkTheme) DarkDashboardColors else LightDashboardColors,
+        LocalDashboardColors provides colors,
         LocalDashboardSpacing provides QoffeeSpacing(),
+        LocalDashboardThemeStyle provides themeStyle,
         content = content,
     )
 }

@@ -2,6 +2,7 @@ package com.qoffee.core.analytics
 
 import com.qoffee.core.common.TimeProvider
 import com.qoffee.core.model.AnalyticsDashboard
+import com.qoffee.core.model.AnalyticsReport
 import com.qoffee.core.model.AnalyticsSummary
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.BeanComparisonInsight
@@ -123,6 +124,11 @@ class AnalyticsEngine @Inject constructor(
             suggestedNextSteps = suggestedNextSteps,
         )
     }
+
+    fun buildReport(
+        records: List<CoffeeRecord>,
+        filter: AnalysisFilter,
+    ): AnalyticsReport = AnalyticsReportBuilder(timeProvider).build(records, filter)
 
     private fun buildMethodAverages(records: List<CoffeeRecord>): List<MethodAverage> {
         return records

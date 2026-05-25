@@ -1,7 +1,9 @@
 package com.qoffee.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,12 +18,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -39,6 +43,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -57,17 +62,81 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.qoffee.core.model.BeanInventory
+import com.qoffee.core.model.BeanInventoryPriority
 import com.qoffee.ui.theme.QoffeeDashboardTheme
 import com.qoffee.ui.theme.qoffeeBottomShellBrush
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
+
+@Composable
+fun QoffeeScreen(
+    paddingValues: PaddingValues,
+    modifier: Modifier = Modifier,
+    testTag: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val spacing = QoffeeDashboardTheme.spacing
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(paddingValues)
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(
+                horizontal = spacing.pageHorizontal,
+                vertical = spacing.pageVertical,
+            )
+            .padding(bottom = 8.dp)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
+        verticalArrangement = Arrangement.spacedBy(spacing.section),
+        content = content,
+    )
+}
+
+@Composable
+fun QoffeeFormScreen(
+    paddingValues: PaddingValues,
+    bottomBar: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    testTag: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val spacing = QoffeeDashboardTheme.spacing
+    Scaffold(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(paddingValues)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = bottomBar,
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    horizontal = spacing.pageHorizontal,
+                    vertical = spacing.pageVertical,
+                ),
+            verticalArrangement = Arrangement.spacedBy(spacing.section),
+            content = content,
+        )
+    }
+}
 
 @Composable
 fun DashboardPage(
@@ -81,10 +150,13 @@ fun DashboardPage(
         modifier = modifier
             .fillMaxSize()
             .padding(paddingValues)
-            .statusBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = spacing.pageHorizontal, vertical = spacing.pageVertical)
-            .padding(bottom = 10.dp)
+            .padding(
+                horizontal = spacing.pageHorizontal,
+                vertical = spacing.pageVertical,
+            )
+            .padding(bottom = 8.dp)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         verticalArrangement = Arrangement.spacedBy(spacing.section),
         content = content,
@@ -99,28 +171,20 @@ fun DashboardActionBar(
     testTag: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val dashboardColors = QoffeeDashboardTheme.colors
-    Column(
+    BottomAppBar(
         modifier = modifier
             .fillMaxWidth()
-            .background(brush = qoffeeBottomShellBrush())
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 3.dp,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(dashboardColors.shellDivider.copy(alpha = 0.72f)),
-        )
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(dashboardColors.shellElevated)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 18.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
                     text = title,
@@ -148,17 +212,10 @@ fun DashboardEmphasisText(
     color: Color = QoffeeDashboardTheme.colors.titleText,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    val dashboardColors = QoffeeDashboardTheme.colors
     Text(
         text = text,
         modifier = modifier,
-        style = style.copy(
-            shadow = Shadow(
-                color = dashboardColors.titleShadow,
-                offset = Offset(0f, 2.5f),
-                blurRadius = 18f,
-            ),
-        ),
+        style = style,
         color = color,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
@@ -182,24 +239,24 @@ fun PageHeader(
             modifier = Modifier
                 .weight(1f)
                 .padding(end = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (!eyebrow.isNullOrBlank()) {
                 Text(
                     text = eyebrow,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
             DashboardEmphasisText(
                 text = title,
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 color = QoffeeDashboardTheme.colors.titleText,
             )
             if (!subtitle.isNullOrBlank()) {
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -217,6 +274,35 @@ fun PageHeader(
 }
 
 @Composable
+fun DashboardArtworkBanner(
+    @DrawableRes imageRes: Int,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    height: Dp = 132.dp,
+) {
+    val dashboardColors = QoffeeDashboardTheme.colors
+    val shape = MaterialTheme.shapes.large
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height),
+        color = dashboardColors.panelMuted.copy(alpha = 0.42f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = shape,
+        border = BorderStroke(1.dp, dashboardColors.panelStroke.copy(alpha = 0.16f)),
+    ) {
+        Image(
+            painter = painterResource(imageRes),
+            contentDescription = contentDescription,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape),
+            contentScale = ContentScale.Crop,
+        )
+    }
+}
+
+@Composable
 fun FeatureEntryCard(
     title: String,
     icon: ImageVector,
@@ -226,6 +312,7 @@ fun FeatureEntryCard(
     hint: String? = null,
     selected: Boolean = false,
     enabled: Boolean = true,
+    testTag: String? = null,
 ) {
     val dashboardColors = QoffeeDashboardTheme.colors
     val background = when {
@@ -249,7 +336,8 @@ fun FeatureEntryCard(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
-            ),
+            )
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         color = background,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = shape,
@@ -258,32 +346,44 @@ fun FeatureEntryCard(
             if (selected) dashboardColors.panelStrokeStrong.copy(alpha = 0.5f) else dashboardColors.panelStroke.copy(alpha = 0.18f),
         ),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(30.dp),
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            hint?.takeIf { it.isNotBlank() }?.let {
+            Surface(
+                color = if (selected) dashboardColors.accentSoft else dashboardColors.panelMuted,
+                shape = CircleShape,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(9.dp)
+                        .size(22.dp),
+                    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                hint?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             badge?.takeIf { it.isNotBlank() }?.let {
                 Text(
@@ -312,8 +412,8 @@ fun MetricCard(
         border = BorderStroke(1.dp, dashboardColors.panelStroke.copy(alpha = 0.14f)),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = label,
@@ -322,7 +422,7 @@ fun MetricCard(
             )
             DashboardEmphasisText(
                 text = value,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 color = dashboardColors.titleText,
             )
             if (!supporting.isNullOrBlank()) {
@@ -341,10 +441,11 @@ fun BeanInventoryCard(
     inventory: BeanInventory,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    priority: BeanInventoryPriority = BeanInventoryPriority.UNKNOWN,
     onClick: (() -> Unit)? = null,
 ) {
     val dashboardColors = QoffeeDashboardTheme.colors
-    val progressColor = MaterialTheme.colorScheme.primary
+    val priorityColors = beanInventoryPriorityColors(priority)
     Surface(
         modifier = modifier
             .width(252.dp)
@@ -358,18 +459,43 @@ fun BeanInventoryCard(
         color = dashboardColors.panelStrong.copy(alpha = 0.72f),
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, dashboardColors.panelStroke.copy(alpha = 0.18f)),
+        border = BorderStroke(
+            1.dp,
+            if (priority == BeanInventoryPriority.URGENT) {
+                priorityColors.progress.copy(alpha = 0.52f)
+            } else {
+                dashboardColors.panelStroke.copy(alpha = 0.18f)
+            },
+        ),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = inventory.beanName,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = inventory.beanName,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(
+                    color = priorityColors.badgeContainer,
+                    contentColor = priorityColors.badgeContent,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Text(
+                        text = priority.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        maxLines = 1,
+                    )
+                }
+            }
             Text(
                 text = buildString {
                     append("烘焙日 ")
@@ -383,17 +509,17 @@ fun BeanInventoryCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    modifier = Modifier.size(92.dp),
+                    modifier = Modifier.size(82.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Canvas(modifier = Modifier.size(92.dp)) {
-                        val strokeWidth = 10.dp.toPx()
+                    Canvas(modifier = Modifier.size(82.dp)) {
+                        val strokeWidth = 9.dp.toPx()
                         drawArc(
-                            color = dashboardColors.panelMuted,
+                            color = priorityColors.track,
                             startAngle = -90f,
                             sweepAngle = 360f,
                             useCenter = false,
@@ -401,7 +527,7 @@ fun BeanInventoryCard(
                             size = Size(size.width, size.height),
                         )
                         drawArc(
-                            color = progressColor,
+                            color = priorityColors.progress,
                             startAngle = -90f,
                             sweepAngle = inventory.remainingRatio.coerceIn(0f, 1f) * 360f,
                             useCenter = false,
@@ -412,7 +538,7 @@ fun BeanInventoryCard(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "${inventory.remainingPercentage}%",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             color = QoffeeDashboardTheme.colors.titleText,
                         )
                         Text(
@@ -445,6 +571,57 @@ fun BeanInventoryCard(
         }
     }
 }
+
+@Composable
+private fun beanInventoryPriorityColors(priority: BeanInventoryPriority): BeanInventoryPriorityColors {
+    val dashboardColors = QoffeeDashboardTheme.colors
+    val scheme = MaterialTheme.colorScheme
+    return when (priority) {
+        BeanInventoryPriority.RESTING -> BeanInventoryPriorityColors(
+            progress = scheme.tertiary,
+            track = scheme.tertiaryContainer.copy(alpha = 0.44f),
+            badgeContainer = scheme.tertiaryContainer.copy(alpha = 0.72f),
+            badgeContent = scheme.onTertiaryContainer,
+        )
+        BeanInventoryPriority.FRESH -> BeanInventoryPriorityColors(
+            progress = dashboardColors.success,
+            track = dashboardColors.success.copy(alpha = 0.18f),
+            badgeContainer = dashboardColors.success.copy(alpha = 0.16f),
+            badgeContent = dashboardColors.success,
+        )
+        BeanInventoryPriority.AGING -> BeanInventoryPriorityColors(
+            progress = dashboardColors.warning,
+            track = dashboardColors.warning.copy(alpha = 0.18f),
+            badgeContainer = dashboardColors.warning.copy(alpha = 0.16f),
+            badgeContent = dashboardColors.warning,
+        )
+        BeanInventoryPriority.URGENT -> BeanInventoryPriorityColors(
+            progress = scheme.error,
+            track = scheme.errorContainer.copy(alpha = 0.36f),
+            badgeContainer = scheme.errorContainer.copy(alpha = 0.82f),
+            badgeContent = scheme.onErrorContainer,
+        )
+        BeanInventoryPriority.EMPTY -> BeanInventoryPriorityColors(
+            progress = scheme.outline,
+            track = dashboardColors.panelMuted,
+            badgeContainer = dashboardColors.panelMuted,
+            badgeContent = scheme.onSurfaceVariant,
+        )
+        BeanInventoryPriority.UNKNOWN -> BeanInventoryPriorityColors(
+            progress = scheme.primary,
+            track = dashboardColors.panelMuted,
+            badgeContainer = dashboardColors.accentSoft.copy(alpha = 0.52f),
+            badgeContent = scheme.onSurfaceVariant,
+        )
+    }
+}
+
+private data class BeanInventoryPriorityColors(
+    val progress: Color,
+    val track: Color,
+    val badgeContainer: Color,
+    val badgeContent: Color,
+)
 
 private fun formatInventoryNumber(value: Double): String {
     return if (value == value.roundToInt().toDouble()) {
@@ -602,90 +779,17 @@ fun NumericStepField(
     quickValues: List<String> = emptyList(),
     decimals: Int = 1,
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text = label, style = MaterialTheme.typography.titleSmall)
-            if (!referenceValue.isNullOrBlank()) {
-                Text(
-                    text = "参考上次：$referenceValue",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = { onValueChange(stepValue(value, -step, decimals)) }) {
-                Icon(
-                    imageVector = Icons.Outlined.Remove,
-                    contentDescription = "减少",
-                )
-            }
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    unfocusedContainerColor = QoffeeDashboardTheme.colors.panelMuted,
-                    focusedContainerColor = QoffeeDashboardTheme.colors.panelMuted,
-                    focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                    unfocusedIndicatorColor = QoffeeDashboardTheme.colors.panelStroke,
-                ),
-            )
-            IconButton(onClick = { onValueChange(stepValue(value, step, decimals)) }) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                    contentDescription = "增加",
-                )
-            }
-        }
-        if (quickValues.isNotEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                quickValues.forEach { quick ->
-                    FilterChip(
-                        selected = value == quick,
-                        onClick = { onValueChange(quick) },
-                        label = { Text(quick) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = QoffeeDashboardTheme.colors.panelMuted,
-                            selectedContainerColor = QoffeeDashboardTheme.colors.accentSoft,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun stepValue(current: String, delta: Double, decimals: Int): String {
-    val currentValue = current.toDoubleOrNull() ?: 0.0
-    val next = (currentValue + delta).coerceAtLeast(0.0)
-    val multiplier = 10.0.pow(decimals)
-    val rounded = (next * multiplier).roundToInt() / multiplier
-    return if (decimals == 0) {
-        rounded.toInt().toString()
-    } else {
-        "%.${decimals}f".format(rounded).trimEnd('0').trimEnd('.')
-    }
-}
-
-private fun Double.pow(exponent: Int): Double {
-    var result = 1.0
-    repeat(exponent) { result *= this }
-    return result
+    NumericInputField(
+        spec = NumericInputSpec(
+            label = label,
+            value = value,
+            min = 0.0,
+            step = step,
+            decimals = decimals,
+            quickValues = quickValues,
+            referenceValue = referenceValue,
+        ),
+        onValueChange = onValueChange,
+        modifier = modifier,
+    )
 }
