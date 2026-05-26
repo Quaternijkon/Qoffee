@@ -381,6 +381,7 @@ private fun QoffeeNavHost(
         composable(TopLevelDestination.History.route) {
             AnalysisRoute(
                 paddingValues = paddingValues,
+                isReadOnlyArchive = currentArchive?.archive?.isReadOnly == true,
                 onOpenRecord = { recordId, reviewContext ->
                     navController.currentBackStackEntry?.savedStateHandle?.set(
                         ANALYSIS_REVIEW_CONTEXT_KEY,
