@@ -43,6 +43,8 @@ import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.SingleChoiceChipGroup
 import com.qoffee.ui.components.DatePickerField
 import com.qoffee.ui.navigation.QoffeeDestinations
+import com.qoffee.ui.components.NumericInputField
+import com.qoffee.ui.components.NumericInputSpec
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -208,7 +210,6 @@ private fun BeanAssetEditorScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(innerPadding)
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -274,11 +275,18 @@ private fun BeanAssetEditorScreen(
                     onValueChange = { roastDateEpochDay = it },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
-                    value = initialStock,
+                NumericInputField(
+                    spec = NumericInputSpec(
+                        label = "初始库存",
+                        value = initialStock,
+                        unit = "g",
+                        min = 0.0,
+                        max = 5000.0,
+                        step = 10.0,
+                        decimals = 0,
+                        quickValues = listOf("100", "200", "500"),
+                    ),
                     onValueChange = { initialStock = it },
-                    label = { Text("初始库存（g）") },
-                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = notes,

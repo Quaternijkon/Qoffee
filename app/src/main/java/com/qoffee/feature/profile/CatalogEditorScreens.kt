@@ -45,6 +45,8 @@ import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.RoastLevelSelector
 import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.SingleChoiceChipGroup
+import com.qoffee.ui.components.NumericInputField
+import com.qoffee.ui.components.NumericInputSpec
 import com.qoffee.ui.navigation.QoffeeDestinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -250,7 +252,6 @@ private fun BeanEditorScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(innerPadding)
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -434,7 +435,6 @@ private fun GrinderEditorScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(innerPadding)
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -452,9 +452,39 @@ private fun GrinderEditorScreen(
                 subtitle = "维护设备名称、格数范围与步进，让记录页可以更准确地给出输入参考。",
             ) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = minSetting, onValueChange = { minSetting = it }, label = { Text("最小格数") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = maxSetting, onValueChange = { maxSetting = it }, label = { Text("最大格数") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = stepSize, onValueChange = { stepSize = it }, label = { Text("步进") }, modifier = Modifier.fillMaxWidth())
+                NumericInputField(
+                    spec = NumericInputSpec(
+                        label = "最小格数",
+                        value = minSetting,
+                        min = 0.0,
+                        max = 200.0,
+                        step = 1.0,
+                        decimals = 1,
+                    ),
+                    onValueChange = { minSetting = it },
+                )
+                NumericInputField(
+                    spec = NumericInputSpec(
+                        label = "最大格数",
+                        value = maxSetting,
+                        min = 0.0,
+                        max = 200.0,
+                        step = 1.0,
+                        decimals = 1,
+                    ),
+                    onValueChange = { maxSetting = it },
+                )
+                NumericInputField(
+                    spec = NumericInputSpec(
+                        label = "步进",
+                        value = stepSize,
+                        min = 0.1,
+                        max = 20.0,
+                        step = 0.1,
+                        decimals = 1,
+                    ),
+                    onValueChange = { stepSize = it },
+                )
                 OutlinedTextField(value = unitLabel, onValueChange = { unitLabel = it }, label = { Text("单位标签") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth())
             }
@@ -462,13 +492,13 @@ private fun GrinderEditorScreen(
                 title = "归一化标定",
                 subtitle = "输入商家建议的刻度区间，Qoffee 会把原始格数拟合到统一的 0~1 坐标系。",
             ) {
-                OutlinedTextField(value = espressoStart, onValueChange = { espressoStart = it }, label = { Text("意式起点") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = espressoEnd, onValueChange = { espressoEnd = it }, label = { Text("意式终点") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = mokaStart, onValueChange = { mokaStart = it }, label = { Text("摩卡壶起点") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = mokaEnd, onValueChange = { mokaEnd = it }, label = { Text("摩卡壶终点") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = pourStart, onValueChange = { pourStart = it }, label = { Text("手冲起点") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = pourEnd, onValueChange = { pourEnd = it }, label = { Text("手冲终点") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = coldBrewPoint, onValueChange = { coldBrewPoint = it }, label = { Text("冷萃上限单点") }, modifier = Modifier.fillMaxWidth())
+                NumericInputField(spec = NumericInputSpec(label = "意式起点", value = espressoStart, min = 0.0, max = 200.0, step = 1.0, decimals = 1), onValueChange = { espressoStart = it })
+                NumericInputField(spec = NumericInputSpec(label = "意式终点", value = espressoEnd, min = 0.0, max = 200.0, step = 1.0, decimals = 1), onValueChange = { espressoEnd = it })
+                NumericInputField(spec = NumericInputSpec(label = "摩卡壶起点", value = mokaStart, min = 0.0, max = 200.0, step = 1.0, decimals = 1), onValueChange = { mokaStart = it })
+                NumericInputField(spec = NumericInputSpec(label = "摩卡壶终点", value = mokaEnd, min = 0.0, max = 200.0, step = 1.0, decimals = 1), onValueChange = { mokaEnd = it })
+                NumericInputField(spec = NumericInputSpec(label = "手冲起点", value = pourStart, min = 0.0, max = 200.0, step = 1.0, decimals = 1), onValueChange = { pourStart = it })
+                NumericInputField(spec = NumericInputSpec(label = "手冲终点", value = pourEnd, min = 0.0, max = 200.0, step = 1.0, decimals = 1), onValueChange = { pourEnd = it })
+                NumericInputField(spec = NumericInputSpec(label = "冷萃上限单点", value = coldBrewPoint, min = 0.0, max = 200.0, step = 1.0, decimals = 1), onValueChange = { coldBrewPoint = it })
                 if (normalizationErrors.isNotEmpty()) {
                     normalizationErrors.forEach { message ->
                         Text(

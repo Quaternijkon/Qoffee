@@ -13,9 +13,9 @@ sealed class TopLevelDestination(
     val icon: ImageVector,
     val testTag: String,
 ) {
-    data object Brew : TopLevelDestination("brew", "冲煮", Icons.Outlined.Science, "nav_brew")
+    data object Brew : TopLevelDestination("brew", "记录", Icons.Outlined.Science, "nav_brew")
     data object Learn : TopLevelDestination("learn", "学习", Icons.AutoMirrored.Outlined.MenuBook, "nav_learn")
-    data object History : TopLevelDestination("history", "历史", Icons.Outlined.AutoGraph, "nav_history")
+    data object History : TopLevelDestination("history", "复盘", Icons.Outlined.AutoGraph, "nav_history")
     data object Mine : TopLevelDestination("mine", "我的", Icons.Outlined.Person, "nav_my")
 }
 
@@ -56,6 +56,8 @@ object QoffeeDestinations {
     const val settingsRecordRoute = "mine/settings/record"
     const val settingsAnalysisRoute = "mine/settings/analysis"
     const val settingsNavigationRoute = "mine/settings/navigation"
+    const val settingsThemeRoute = "mine/settings/theme"
+    const val settingsEnvironmentRoute = "mine/settings/environment"
 
     fun recordDetail(recordId: Long) = "record/$recordId"
 

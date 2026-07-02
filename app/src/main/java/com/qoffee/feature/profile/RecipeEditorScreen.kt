@@ -274,7 +274,6 @@ private fun RecipeEditorScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(innerPadding)
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -522,7 +521,6 @@ private fun RecipeEditorScreenLegacy(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(innerPadding)
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),

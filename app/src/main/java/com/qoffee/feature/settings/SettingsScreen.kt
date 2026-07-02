@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.AutoGraph
+import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.ViewDay
 import androidx.compose.material3.Icon
@@ -22,22 +25,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.qoffee.R
 import com.qoffee.core.model.AnalysisTimeRange
+import com.qoffee.core.model.AppThemeStyle
 import com.qoffee.core.model.BeanProfile
 import com.qoffee.core.model.GrinderProfile
+import com.qoffee.core.model.ServerEnvironment
 import com.qoffee.core.model.UserSettings
 import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.PreferenceRepository
+import com.qoffee.ui.components.DashboardArtworkBanner
 import com.qoffee.ui.components.DashboardPage
 import com.qoffee.ui.components.DropdownField
 import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.SectionCard
+import com.qoffee.ui.QoffeeTestTags
+import com.qoffee.ui.theme.GoogleBlueRefined
+import com.qoffee.ui.theme.GoogleGreenRefined
+import com.qoffee.ui.theme.GoogleRedRefined
+import com.qoffee.ui.theme.GoogleYellowRefined
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -92,6 +105,18 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setThemeStyle(style: AppThemeStyle) {
+        viewModelScope.launch {
+            preferenceRepository.setThemeStyle(style)
+        }
+    }
+
+    fun setServerEnvironment(environment: ServerEnvironment) {
+        viewModelScope.launch {
+            preferenceRepository.setServerEnvironment(environment)
+        }
+    }
+
     fun setDefaultBean(beanId: Long?) {
         viewModelScope.launch {
             preferenceRepository.setDefaultBeanProfile(beanId)
@@ -112,8 +137,13 @@ fun SettingsMenuRoute(
     onOpenRecordSettings: () -> Unit,
     onOpenAnalysisSettings: () -> Unit,
     onOpenNavigationSettings: () -> Unit,
+    onOpenThemeSettings: () -> Unit,
+    onOpenEnvironmentSettings: () -> Unit,
 ) {
-    DashboardPage(paddingValues = paddingValues) {
+    DashboardPage(
+        paddingValues = paddingValues,
+        testTag = QoffeeTestTags.SETTINGS_SCREEN,
+    ) {
         PageHeader(
             title = "设置",
             subtitle = null,
@@ -123,6 +153,19 @@ fun SettingsMenuRoute(
             Text("返回")
         }
         SectionCard(title = "目录") {
+            SettingsMenuItem(
+                title = "主题设置",
+                subtitle = "在古典与简约两套视觉风格之间切换",
+                icon = Icons.Outlined.Palette,
+                onClick = onOpenThemeSettings,
+            )
+            SettingsMenuItem(
+                title = "环境设置",
+                subtitle = "在测试后端与正式后端之间切换",
+                icon = Icons.Outlined.CloudQueue,
+                onClick = onOpenEnvironmentSettings,
+                testTag = QoffeeTestTags.SETTINGS_ENVIRONMENT_ITEM,
+            )
             SettingsMenuItem(
                 title = "记录设置",
                 subtitle = "草稿恢复与录入偏好",
@@ -141,6 +184,83 @@ fun SettingsMenuRoute(
                 icon = Icons.Outlined.ViewDay,
                 onClick = onOpenNavigationSettings,
             )
+        }
+    }
+}
+
+@Composable
+fun ThemeSettingsRoute(
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    DashboardPage(paddingValues = paddingValues) {
+        PageHeader(
+            title = "主题设置",
+            subtitle = null,
+            eyebrow = "QOFFEE / SETTINGS / THEME",
+        )
+        OutlinedButton(onClick = onBack) {
+            Text("返回")
+        }
+        SectionCard(title = "视觉风格", subtitle = "深色和浅色仍跟随系统设置。") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(GoogleBlueRefined, GoogleGreenRefined, GoogleYellowRefined, GoogleRedRefined).forEach { color ->
+                    Surface(
+                        modifier = Modifier.size(34.dp),
+                        color = color,
+                        shape = MaterialTheme.shapes.large,
+                    ) {}
+                }
+            }
+            AppThemeStyle.entries.forEach { style ->
+                SettingChoiceCard(
+                    title = style.displayName,
+                    subtitle = style.description,
+                    selected = settings.themeStyle == style,
+                    onClick = { viewModel.setThemeStyle(style) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EnvironmentSettingsRoute(
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    DashboardPage(
+        paddingValues = paddingValues,
+        testTag = QoffeeTestTags.SETTINGS_ENVIRONMENT_SCREEN,
+    ) {
+        PageHeader(
+            title = "环境设置",
+            subtitle = null,
+            eyebrow = "QOFFEE / SETTINGS / ENVIRONMENT",
+        )
+        OutlinedButton(onClick = onBack) {
+            Text("返回")
+        }
+        DashboardArtworkBanner(
+            imageRes = R.drawable.art_cloud_sync,
+            height = 112.dp,
+        )
+        SectionCard(
+            title = "后端环境",
+            subtitle = "切换环境会退出当前云同步账号，避免测试与正式数据混用。",
+        ) {
+            ServerEnvironment.entries.forEach { environment ->
+                SettingChoiceCard(
+                    title = environment.displayName,
+                    subtitle = environment.description + " 当前入口：" + environment.endpointLabel,
+                    selected = settings.serverEnvironment == environment,
+                    onClick = { viewModel.setServerEnvironment(environment) },
+                )
+            }
         }
     }
 }
@@ -253,11 +373,13 @@ private fun SettingsMenuItem(
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
+    testTag: String? = null,
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.large,
     ) {
@@ -285,6 +407,50 @@ private fun SettingsMenuItem(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingChoiceCard(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            Text(
+                text = if (selected) "当前" else "切换",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

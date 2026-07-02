@@ -24,6 +24,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.qoffee.R
 import com.qoffee.core.model.GlossaryTerm
 import com.qoffee.core.model.LearningTrack
 import com.qoffee.core.model.Lesson
@@ -33,6 +34,7 @@ import com.qoffee.domain.repository.EntitlementRepository
 import com.qoffee.domain.repository.LearningRepository
 import com.qoffee.ui.QoffeeTestTags
 import com.qoffee.ui.components.DashboardPage
+import com.qoffee.ui.components.DashboardArtworkBanner
 import com.qoffee.ui.components.FeatureEntryCard
 import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.SectionCard
@@ -122,6 +124,10 @@ private fun LearnScreen(
                 Text("返回")
             }
         }
+        DashboardArtworkBanner(
+            imageRes = R.drawable.art_learn_guides,
+            height = 118.dp,
+        )
 
         SectionCard(title = "入口") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

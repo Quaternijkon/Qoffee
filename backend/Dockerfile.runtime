@@ -1,0 +1,6 @@
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY backend/build/install/backend /app
+RUN chmod +x /app/bin/backend
+EXPOSE 8080
+ENTRYPOINT ["/app/bin/backend"]

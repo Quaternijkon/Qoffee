@@ -24,8 +24,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.qoffee.R
 import com.qoffee.core.model.GuideTemplate
 import com.qoffee.domain.repository.GuideRepository
+import com.qoffee.ui.components.DashboardArtworkBanner
 import com.qoffee.ui.components.DashboardPage
 import com.qoffee.ui.components.EmptyStateCard
 import com.qoffee.ui.components.PageHeader
@@ -75,6 +77,10 @@ fun GuideLibraryRoute(
             title = "指导库",
             subtitle = "先预览，再开始；内置模板和你自己的指导会放在一起。",
             eyebrow = "QOFFEE / GUIDE",
+        )
+        DashboardArtworkBanner(
+            imageRes = R.drawable.art_learn_guides,
+            height = 118.dp,
         )
         SectionCard(title = "怎么使用") {
             Text("1. 先打开一条指导，完整浏览阶段卡片。", style = MaterialTheme.typography.bodyMedium)

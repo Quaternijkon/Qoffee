@@ -24,6 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,16 +37,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.qoffee.R
 import com.qoffee.core.model.AnalysisTimeRange
 import com.qoffee.core.model.ArchiveSummary
 import com.qoffee.core.model.BeanInventory
 import com.qoffee.core.model.BeanProfile
 import com.qoffee.core.model.CoffeeRecord
+import com.qoffee.core.model.EntitlementTier
 import com.qoffee.core.model.FileExportPayload
 import com.qoffee.core.model.GrinderProfile
 import com.qoffee.core.model.RecordDraftLaunchBehavior
@@ -53,21 +57,31 @@ import com.qoffee.core.model.RecordPrefillSource
 import com.qoffee.core.model.RecordStatus
 import com.qoffee.core.model.RecipeTemplate
 import com.qoffee.core.model.RestoreOutcome
+import com.qoffee.core.model.ShareCard
+import com.qoffee.core.model.SyncConflictResolution
+import com.qoffee.core.model.SyncState
+import com.qoffee.core.model.UserEntitlements
 import com.qoffee.core.model.UserSettings
 import com.qoffee.core.model.resolveRecordDraftLaunchBehavior
 import com.qoffee.domain.repository.BackupRepository
 import com.qoffee.domain.repository.CatalogRepository
+import com.qoffee.domain.repository.EntitlementRepository
 import com.qoffee.domain.repository.ExperimentRepository
 import com.qoffee.domain.repository.PreferenceRepository
 import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.domain.repository.ShareRepository
+import com.qoffee.domain.repository.SyncRepository
 import com.qoffee.ui.QoffeeTestTags
 import com.qoffee.ui.components.DashboardPage
+import com.qoffee.ui.components.DashboardArtworkBanner
 import com.qoffee.ui.components.EmptyStateCard
 import com.qoffee.ui.components.PageHeader
 import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.StatChip
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -80,6 +94,7 @@ data class ProfileUiState(
     val beans: List<BeanProfile> = emptyList(),
     val grinders: List<GrinderProfile> = emptyList(),
     val recipes: List<RecipeTemplate> = emptyList(),
+    val shareCards: List<ShareCard> = emptyList(),
     val activeDraft: CoffeeRecord? = null,
     val settings: UserSettings = UserSettings(),
 )
@@ -90,6 +105,7 @@ class ProfileViewModel @Inject constructor(
     recipeRepository: RecipeRepository,
     experimentRepository: ExperimentRepository,
     recordRepository: RecordRepository,
+    shareRepository: ShareRepository,
     private val preferenceRepository: PreferenceRepository,
 ) : ViewModel() {
 
@@ -113,9 +129,12 @@ class ProfileViewModel @Inject constructor(
             beans = state.beans,
             grinders = state.grinders,
             recipes = state.recipes,
+            shareCards = state.shareCards,
             activeDraft = state.activeDraft,
             settings = settings,
         )
+    }.combine(shareRepository.observeShareCards()) { state, shareCards ->
+        state.copy(shareCards = shareCards)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -132,11 +151,64 @@ class ProfileViewModel @Inject constructor(
 @HiltViewModel
 class MyDataViewModel @Inject constructor(
     private val backupRepository: BackupRepository,
+    private val syncRepository: SyncRepository,
 ) : ViewModel() {
+
+    val syncState: StateFlow<SyncState> = syncRepository.observeSyncState().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = SyncState(),
+    )
 
     suspend fun exportBackup(): FileExportPayload = backupRepository.exportBackup()
 
     suspend fun restoreBackup(json: String): RestoreOutcome = backupRepository.restoreBackup(json)
+
+    suspend fun registerWithEmail(email: String, password: String): String =
+        syncRepository.registerWithEmail(email, password).message
+
+    suspend fun signInWithEmail(email: String, password: String): String =
+        syncRepository.signInWithEmail(email, password).message
+
+    suspend fun signOut(): String = syncRepository.signOut().message
+
+    suspend fun pushChanges(): String = syncRepository.pushChanges().message
+
+    suspend fun pullChanges(): String = syncRepository.pullChanges().message
+
+    suspend fun createSnapshot(): String = syncRepository.createSnapshot().message
+
+    suspend fun keepRemote(conflictId: String): String =
+        syncRepository.resolveConflict(conflictId, SyncConflictResolution.KEEP_REMOTE).message
+
+    suspend fun keepLocal(conflictId: String): String =
+        syncRepository.resolveConflict(conflictId, SyncConflictResolution.KEEP_LOCAL).message
+}
+
+data class SubscriptionUiState(
+    val entitlements: UserEntitlements = UserEntitlements(),
+)
+
+@HiltViewModel
+class SubscriptionViewModel @Inject constructor(
+    private val entitlementRepository: EntitlementRepository,
+) : ViewModel() {
+
+    val uiState: StateFlow<SubscriptionUiState> = entitlementRepository.observeEntitlements()
+        .combine(kotlinx.coroutines.flow.flowOf(Unit)) { entitlements, _ ->
+            SubscriptionUiState(entitlements = entitlements)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = SubscriptionUiState(),
+        )
+
+    fun setPreviewTier(tier: EntitlementTier) {
+        viewModelScope.launch {
+            entitlementRepository.setPreviewTier(tier)
+        }
+    }
 }
 
 @Composable
@@ -150,12 +222,44 @@ fun ProfileRoute(
     onOpenLearning: () -> Unit,
     onOpenSubscription: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
+    syncViewModel: MyDataViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val syncState by syncViewModel.syncState.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
+    var isSyncWorking by remember { mutableStateOf(false) }
+    var syncEmail by remember(syncState.account?.email) { mutableStateOf(syncState.account?.email.orEmpty()) }
+    var syncPassword by remember { mutableStateOf("") }
+    var syncOperationMessage by remember { mutableStateOf<String?>(null) }
+
+    fun runSyncOperation(block: suspend () -> String) {
+        coroutineScope.launch {
+            isSyncWorking = true
+            syncOperationMessage = runCatching { block() }
+                .getOrElse { error -> error.message ?: "同步操作失败，请稍后重试。" }
+            isSyncWorking = false
+        }
+    }
+
     ProfileScreen(
         paddingValues = paddingValues,
         currentArchive = currentArchive,
         uiState = uiState,
+        syncState = syncState,
+        syncEmail = syncEmail,
+        syncPassword = syncPassword,
+        isSyncWorking = isSyncWorking,
+        syncOperationMessage = syncOperationMessage,
+        onSyncEmailChange = { syncEmail = it },
+        onSyncPasswordChange = { syncPassword = it },
+        onRegister = { runSyncOperation { syncViewModel.registerWithEmail(syncEmail, syncPassword) } },
+        onSignIn = { runSyncOperation { syncViewModel.signInWithEmail(syncEmail, syncPassword) } },
+        onSignOut = { runSyncOperation { syncViewModel.signOut() } },
+        onPush = { runSyncOperation { syncViewModel.pushChanges() } },
+        onPull = { runSyncOperation { syncViewModel.pullChanges() } },
+        onSnapshot = { runSyncOperation { syncViewModel.createSnapshot() } },
+        onKeepRemote = { conflictId -> runSyncOperation { syncViewModel.keepRemote(conflictId) } },
+        onKeepLocal = { conflictId -> runSyncOperation { syncViewModel.keepLocal(conflictId) } },
         onOpenArchiveSheet = onOpenArchiveSheet,
         onOpenAssets = onOpenAssets,
         onOpenData = onOpenData,
@@ -306,7 +410,10 @@ fun MyDataRoute(
 fun MySubscriptionRoute(
     paddingValues: PaddingValues,
     onBack: () -> Unit,
+    viewModel: SubscriptionViewModel = hiltViewModel(),
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val entitlements = uiState.entitlements
     DashboardPage(paddingValues = paddingValues) {
         PageHeader(
             title = "订阅",
@@ -317,17 +424,189 @@ fun MySubscriptionRoute(
             Text("返回")
         }
         SectionCard(title = "当前计划") {
-            StatChip(text = "Free")
+            StatChip(text = entitlements.tier.displayName)
             Text(
                 text = "基础记录、学习和图表功能可用。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                text = if (entitlements.tier == EntitlementTier.PRO) {
+                    "Pro 预览已开启：高级复盘、实验历史、云同步和分享卡会显示为已解锁。"
+                } else {
+                    "Free 保留完整本地记录、配方、基础复盘和本地备份。"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                entitlements.unlockedFeatures.forEach { feature ->
+                    StatChip(text = feature)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { viewModel.setPreviewTier(EntitlementTier.FREE) }) {
+                    Text("Free")
+                }
+                Button(onClick = { viewModel.setPreviewTier(EntitlementTier.PRO) }) {
+                    Text("Pro 预览")
+                }
+            }
         }
         SectionCard(title = "Pro 预览") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("完整课程库", "实验工作台", "高级导出", "配方版本对比").forEach { feature ->
+                entitlements.proHighlights.forEach { feature ->
                     StatChip(text = feature)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AccountSyncSection(
+    syncState: SyncState,
+    email: String,
+    password: String,
+    isWorking: Boolean,
+    isReadOnlyArchive: Boolean,
+    operationMessage: String?,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onRegister: () -> Unit,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+    onPush: () -> Unit,
+    onPull: () -> Unit,
+    onSnapshot: () -> Unit,
+    onKeepRemote: (String) -> Unit,
+    onKeepLocal: (String) -> Unit,
+) {
+    SectionCard(
+        title = "账号与云同步",
+        subtitle = "登录后可同步本机记录、配方、豆子和快照。",
+    ) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatChip(text = syncState.backendLabel)
+            StatChip(text = syncState.archiveScope)
+            StatChip(text = syncState.phase.displayName)
+        }
+
+        if (syncState.account == null) {
+            OutlinedTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                label = { Text("邮箱") },
+                singleLine = true,
+                enabled = !isWorking,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = onPasswordChange,
+                label = { Text("密码") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                supportingText = { Text("至少 8 位。登录和注册按钮会一直可点，具体校验由后端返回。") },
+                enabled = !isWorking,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Button(
+                    onClick = onSignIn,
+                    enabled = !isWorking,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("登录")
+                }
+                OutlinedButton(
+                    onClick = onRegister,
+                    enabled = !isWorking,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("注册")
+                }
+            }
+        } else {
+            Text(
+                text = "账号：${syncState.account.email}",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                syncState.lastPushedAt?.let { StatChip(text = "上传 ${formatTimestamp(it)}") }
+                syncState.lastPulledAt?.let { StatChip(text = "拉取 ${formatTimestamp(it)}") }
+                syncState.lastSnapshot?.let { snapshot ->
+                    StatChip(text = "快照 ${formatTimestamp(snapshot.createdAt)}")
+                    StatChip(text = "${snapshot.byteSize} bytes")
+                }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onPush,
+                    enabled = !isWorking && !isReadOnlyArchive,
+                ) {
+                    Text("上传本机")
+                }
+                OutlinedButton(
+                    onClick = onPull,
+                    enabled = !isWorking,
+                ) {
+                    Text("拉取远端")
+                }
+                OutlinedButton(
+                    onClick = onSnapshot,
+                    enabled = !isWorking && !isReadOnlyArchive,
+                ) {
+                    Text("创建快照")
+                }
+                OutlinedButton(
+                    onClick = onSignOut,
+                    enabled = !isWorking,
+                ) {
+                    Text("退出")
+                }
+            }
+        }
+
+        (operationMessage ?: syncState.lastMessage)?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (syncState.pendingConflicts.isEmpty()) {
+            Text(
+                text = "当前没有待处理冲突。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            syncState.pendingConflicts.forEach { conflict ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(conflict.summary, style = MaterialTheme.typography.titleSmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { onKeepRemote(conflict.id) }, enabled = !isWorking) {
+                                Text("保留远端")
+                            }
+                            OutlinedButton(onClick = { onKeepLocal(conflict.id) }, enabled = !isWorking) {
+                                Text("保留本机")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -339,6 +618,21 @@ private fun ProfileScreen(
     paddingValues: PaddingValues,
     currentArchive: ArchiveSummary?,
     uiState: ProfileUiState,
+    syncState: SyncState,
+    syncEmail: String,
+    syncPassword: String,
+    isSyncWorking: Boolean,
+    syncOperationMessage: String?,
+    onSyncEmailChange: (String) -> Unit,
+    onSyncPasswordChange: (String) -> Unit,
+    onRegister: () -> Unit,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+    onPush: () -> Unit,
+    onPull: () -> Unit,
+    onSnapshot: () -> Unit,
+    onKeepRemote: (String) -> Unit,
+    onKeepLocal: (String) -> Unit,
     onOpenArchiveSheet: () -> Unit,
     onOpenAssets: () -> Unit,
     onOpenData: () -> Unit,
@@ -360,6 +654,29 @@ private fun ProfileScreen(
                 }
             },
         )
+        DashboardArtworkBanner(
+            imageRes = R.drawable.art_cloud_sync,
+            height = 118.dp,
+        )
+
+        AccountSyncSection(
+            syncState = syncState,
+            email = syncEmail,
+            password = syncPassword,
+            isWorking = isSyncWorking || syncState.isBusy,
+            isReadOnlyArchive = currentArchive?.archive?.isReadOnly == true,
+            operationMessage = syncOperationMessage,
+            onEmailChange = onSyncEmailChange,
+            onPasswordChange = onSyncPasswordChange,
+            onRegister = onRegister,
+            onSignIn = onSignIn,
+            onSignOut = onSignOut,
+            onPush = onPush,
+            onPull = onPull,
+            onSnapshot = onSnapshot,
+            onKeepRemote = onKeepRemote,
+            onKeepLocal = onKeepLocal,
+        )
 
         SectionCard(title = "目录") {
             MenuListItem(
@@ -379,6 +696,7 @@ private fun ProfileScreen(
                 subtitle = "记录 / 分析 / 导航",
                 icon = Icons.Outlined.Settings,
                 onClick = onOpenSettings,
+                testTag = QoffeeTestTags.PROFILE_SETTINGS,
             )
             MenuListItem(
                 title = "学习",
@@ -404,6 +722,61 @@ private fun ProfileScreen(
                 Text(
                     text = "已启用库存的豆子 ${uiState.inventory.size} 个",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        if (uiState.shareCards.isNotEmpty()) {
+            SectionCard(
+                title = "分享验证",
+                subtitle = "先用分享卡和配方导入链接验证轻量社区能力，所有公开内容都应可撤回。",
+            ) {
+                uiState.shareCards.take(3).forEach { card ->
+                    ShareCardPreview(card = card)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareCardPreview(card: ShareCard) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(card.title, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = card.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                card.badge?.let { StatChip(text = it) }
+            }
+            if (card.body.isNotBlank()) {
+                Text(
+                    text = card.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            card.importHint?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -462,6 +835,10 @@ private fun MyAssetsScreen(
         OutlinedButton(onClick = onBack) {
             Text("返回")
         }
+        DashboardArtworkBanner(
+            imageRes = R.drawable.art_assets_recipe,
+            height = 118.dp,
+        )
 
         SectionCard(title = "快捷操作", subtitle = "资产仍可显式管理，但真正的使用动作都应该回到记录。") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -600,11 +977,13 @@ private fun MenuListItem(
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
+    testTag: String? = null,
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.large,
     ) {
@@ -697,6 +1076,10 @@ private sealed interface AssetRecordAction {
 
 private fun formatNumber(value: Double): String {
     return String.format(java.util.Locale.CHINA, "%.1f", value).trimEnd('0').trimEnd('.')
+}
+
+private fun formatTimestamp(value: Long): String {
+    return SimpleDateFormat("M/d HH:mm", java.util.Locale.CHINA).format(Date(value))
 }
 
 private fun Context.writeTextToUri(uri: android.net.Uri, content: String): Result<Unit> {

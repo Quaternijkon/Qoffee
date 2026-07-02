@@ -33,3 +33,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Qoffee"
 include(":app")
+include(":backend")

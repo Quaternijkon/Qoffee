@@ -1,9 +1,9 @@
 package com.qoffee.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,14 +17,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FolderCopy
@@ -35,6 +38,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -50,9 +56,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -67,6 +74,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.qoffee.core.model.AppThemeStyle
 import com.qoffee.core.model.ArchiveSummary
 import com.qoffee.feature.analytics.AnalysisRoute
 import com.qoffee.feature.brew.BrewSessionRoute
@@ -86,16 +94,29 @@ import com.qoffee.feature.records.RecordDetailRoute
 import com.qoffee.feature.records.RecordEditorRoute
 import com.qoffee.feature.records.RecordsRoute
 import com.qoffee.feature.settings.AnalysisSettingsRoute
+import com.qoffee.feature.settings.EnvironmentSettingsRoute
 import com.qoffee.feature.settings.NavigationSettingsRoute
 import com.qoffee.feature.settings.RecordSettingsRoute
 import com.qoffee.feature.settings.SettingsMenuRoute
+import com.qoffee.feature.settings.ThemeSettingsRoute
 import com.qoffee.ui.components.SectionCard
 import com.qoffee.ui.components.StatChip
 import com.qoffee.ui.navigation.QoffeeDestinations
 import com.qoffee.ui.navigation.RecordEditorEntry
 import com.qoffee.ui.navigation.TopLevelDestination
+import com.qoffee.ui.theme.GoogleBlueDark
+import com.qoffee.ui.theme.GoogleBlueRefined
+import com.qoffee.ui.theme.GoogleBlueSoft
+import com.qoffee.ui.theme.GoogleGreenDark
+import com.qoffee.ui.theme.GoogleGreenRefined
+import com.qoffee.ui.theme.GoogleGreenSoft
+import com.qoffee.ui.theme.GoogleRedDark
+import com.qoffee.ui.theme.GoogleRedRefined
+import com.qoffee.ui.theme.GoogleRedSoft
+import com.qoffee.ui.theme.GoogleYellowDark
+import com.qoffee.ui.theme.GoogleYellowRefined
+import com.qoffee.ui.theme.GoogleYellowSoft
 import com.qoffee.ui.theme.QoffeeDashboardTheme
-import com.qoffee.ui.theme.qoffeeBottomShellBrush
 import com.qoffee.ui.theme.qoffeePageBackgroundBrush
 
 private const val ANALYSIS_REVIEW_CONTEXT_KEY = "analysisReviewContext"
@@ -159,49 +180,28 @@ fun QoffeeApp(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(brush = qoffeePageBackgroundBrush()),
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
-        DashboardBackdrop()
         Scaffold(
-            containerColor = Color.Transparent,
+            containerColor = MaterialTheme.colorScheme.background,
             contentColor = MaterialTheme.colorScheme.onBackground,
+            contentWindowInsets = WindowInsets.statusBars,
             bottomBar = {
-                if (showBottomBar && currentDestination != null) {
+                if (showBottomBar) {
                     DashboardNavigationBar(
-                        currentDestination = currentDestination,
+                        currentDestination = checkNotNull(currentDestination),
                         destinations = topLevelDestinations,
+                        themeStyle = appUiState.settings.themeStyle,
                         onNavigate = navigateToTopLevel,
                     )
                 }
             },
         ) { paddingValues ->
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(currentTopLevelIndex, showBottomBar) {
-                        if (!showBottomBar || currentTopLevelIndex !in topLevelDestinations.indices) {
-                            return@pointerInput
-                        }
-                        var dragAmountTotal = 0f
-                        detectHorizontalDragGestures(
-                            onHorizontalDrag = { _, dragAmount ->
-                                dragAmountTotal += dragAmount
-                            },
-                            onDragEnd = {
-                                when {
-                                    dragAmountTotal > 110f && currentTopLevelIndex > 0 -> {
-                                        navigateToTopLevel(topLevelDestinations[currentTopLevelIndex - 1])
-                                    }
-                                    dragAmountTotal < -110f && currentTopLevelIndex < topLevelDestinations.lastIndex -> {
-                                        navigateToTopLevel(topLevelDestinations[currentTopLevelIndex + 1])
-                                    }
-                                }
-                            },
-                        )
-                    },
+                modifier = Modifier.fillMaxSize(),
             ) {
                 QoffeeNavHost(
                     paddingValues = paddingValues,
@@ -456,6 +456,8 @@ private fun QoffeeNavHost(
                 onOpenRecordSettings = { navigateForward(QoffeeDestinations.settingsRecordRoute) },
                 onOpenAnalysisSettings = { navigateForward(QoffeeDestinations.settingsAnalysisRoute) },
                 onOpenNavigationSettings = { navigateForward(QoffeeDestinations.settingsNavigationRoute) },
+                onOpenThemeSettings = { navigateForward(QoffeeDestinations.settingsThemeRoute) },
+                onOpenEnvironmentSettings = { navigateForward(QoffeeDestinations.settingsEnvironmentRoute) },
             )
         }
         composable(QoffeeDestinations.myLearningRoute) {
@@ -486,6 +488,18 @@ private fun QoffeeNavHost(
         }
         composable(QoffeeDestinations.settingsNavigationRoute) {
             NavigationSettingsRoute(
+                paddingValues = paddingValues,
+                onBack = ::popBack,
+            )
+        }
+        composable(QoffeeDestinations.settingsThemeRoute) {
+            ThemeSettingsRoute(
+                paddingValues = paddingValues,
+                onBack = ::popBack,
+            )
+        }
+        composable(QoffeeDestinations.settingsEnvironmentRoute) {
+            EnvironmentSettingsRoute(
                 paddingValues = paddingValues,
                 onBack = ::popBack,
             )
@@ -869,83 +883,97 @@ private fun DashboardBackdrop() {
 
 @Composable
 private fun DashboardNavigationBar(
+    modifier: Modifier = Modifier,
     currentDestination: NavDestination,
     destinations: List<TopLevelDestination>,
+    themeStyle: AppThemeStyle,
     onNavigate: (TopLevelDestination) -> Unit,
 ) {
-    val dashboardColors = QoffeeDashboardTheme.colors
-    Column(
-        modifier = Modifier
+    val isMinimal = themeStyle == AppThemeStyle.MINIMAL
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val containerColor = if (isMinimal) {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+    NavigationBar(
+        modifier = modifier
             .fillMaxWidth()
-            .background(brush = qoffeeBottomShellBrush()),
+            .navigationBarsPadding()
+            .height(60.dp),
+        containerColor = containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = if (isMinimal) 0.dp else 3.dp,
+        windowInsets = WindowInsets(0, 0, 0, 0),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(dashboardColors.shellDivider.copy(alpha = 0.72f)),
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(dashboardColors.shellElevated)
-                .navigationBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            destinations.forEach { destination ->
-                val selected = currentDestination.hierarchy.any { it.route == destination.route }
-                val containerColor by animateColorAsState(
-                    targetValue = if (selected) {
-                        dashboardColors.accentSoft.copy(alpha = 0.56f)
-                    } else {
-                        Color.Transparent
-                    },
-                    animationSpec = spring(stiffness = 500f),
-                    label = "navContainer",
-                )
-                val contentColor by animateColorAsState(
-                    targetValue = if (selected) {
-                        dashboardColors.titleText
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    animationSpec = spring(stiffness = 500f),
-                    label = "navContent",
-                )
-                val selectedScale = if (selected) 1.02f else 1f
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(containerColor)
-                        .graphicsLayer {
-                            scaleX = selectedScale
-                            scaleY = selectedScale
-                        }
-                        .testTag(destination.testTag),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigate(destination) }
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Icon(
-                            imageVector = destination.icon,
-                            contentDescription = destination.label,
-                            tint = if (selected) MaterialTheme.colorScheme.primary else contentColor,
-                        )
-                        Text(
-                            text = destination.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = contentColor,
-                        )
-                    }
-                }
-            }
+        destinations.forEach { destination ->
+            val selected = currentDestination.hierarchy.any { it.route == destination.route }
+            val accent = if (isMinimal) destination.dockAccent(isDark = isDark) else null
+            NavigationBarItem(
+                selected = selected,
+                onClick = { onNavigate(destination) },
+                icon = {
+                    Icon(
+                        imageVector = destination.icon,
+                        contentDescription = destination.label,
+                        modifier = Modifier.size(20.dp),
+                    )
+                },
+                label = {
+                    Text(
+                        text = destination.label,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                },
+                modifier = Modifier.testTag(destination.testTag),
+                colors = accent?.let {
+                    NavigationBarItemDefaults.colors(
+                        selectedIconColor = it.foreground,
+                        selectedTextColor = it.foreground,
+                        indicatorColor = it.container,
+                        unselectedIconColor = it.unselectedIcon,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.74f),
+                    )
+                } ?: NavigationBarItemDefaults.colors(),
+            )
         }
     }
+}
+
+private data class DockAccent(
+    val foreground: Color,
+    val container: Color,
+    val unselectedIcon: Color,
+)
+
+private fun TopLevelDestination.dockAccent(
+    isDark: Boolean,
+): DockAccent {
+    val (foreground, container) = when (this) {
+        TopLevelDestination.Brew -> if (isDark) {
+            GoogleBlueDark to Color(0xFF17345F)
+        } else {
+            GoogleBlueRefined to GoogleBlueSoft
+        }
+        TopLevelDestination.Learn -> if (isDark) {
+            GoogleGreenDark to Color(0xFF123E25)
+        } else {
+            GoogleGreenRefined to GoogleGreenSoft
+        }
+        TopLevelDestination.History -> if (isDark) {
+            GoogleYellowDark to Color(0xFF463B12)
+        } else {
+            GoogleYellowRefined to GoogleYellowSoft
+        }
+        TopLevelDestination.Mine -> if (isDark) {
+            GoogleRedDark to Color(0xFF4A1C19)
+        } else {
+            GoogleRedRefined to GoogleRedSoft
+        }
+    }
+    return DockAccent(
+        foreground = foreground,
+        container = container,
+        unselectedIcon = foreground.copy(alpha = if (isDark) 0.68f else 0.58f),
+    )
 }

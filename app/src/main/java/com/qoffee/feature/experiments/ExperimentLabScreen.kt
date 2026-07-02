@@ -6,11 +6,14 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -20,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +36,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.qoffee.R
 import com.qoffee.core.analytics.AnalyticsEngine
 import com.qoffee.core.model.AnalysisFilter
 import com.qoffee.core.model.AnalysisTimeRange
@@ -49,6 +54,7 @@ import com.qoffee.domain.repository.CatalogRepository
 import com.qoffee.domain.repository.ExperimentRepository
 import com.qoffee.domain.repository.RecipeRepository
 import com.qoffee.domain.repository.RecordRepository
+import com.qoffee.ui.components.DashboardArtworkBanner
 import com.qoffee.ui.components.DropdownField
 import com.qoffee.ui.components.DropdownOption
 import com.qoffee.ui.components.EmptyStateCard
@@ -211,6 +217,10 @@ private fun ExperimentLabScreen(
             subtitle = "先选基线，再填写变量水平，最后按格子逐杯记录。",
             eyebrow = "QOFFEE / LAB",
         )
+        DashboardArtworkBanner(
+            imageRes = R.drawable.art_experiment_lab,
+            height = 118.dp,
+        )
 
         SectionCard(title = "怎么开始", subtitle = "首版按“基线优先”的流程来创建项目。") {
             Text("1. 先选一个基线记录或配方。", style = MaterialTheme.typography.bodyMedium)
@@ -283,6 +293,7 @@ private fun CreateExperimentDialog(
     onCreateProject: (ExperimentProjectDraft, (Long) -> Unit) -> Unit,
     onCreated: (Long) -> Unit,
 ) {
+    val dialogScrollState = rememberScrollState()
     var title by remember { mutableStateOf("") }
     var hypothesis by remember { mutableStateOf("") }
     var selectedRecordId by remember { mutableLongStateOf(-1L) }
@@ -302,7 +313,13 @@ private fun CreateExperimentDialog(
         onDismissRequest = onDismiss,
         title = { Text("新建实验") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(dialogScrollState),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Text(
                     text = "先选择基线，再按需要填写变量水平。留空的变量不会进入本次实验。",
                     style = MaterialTheme.typography.bodySmall,
@@ -412,6 +429,11 @@ private fun ExperimentProjectScreen(
         return
     }
     var selectedScenarioId by remember(project.id) { mutableStateOf(project.scenarioTabs.firstOrNull()?.first ?: "default") }
+    LaunchedEffect(project.id, project.scenarioTabs, selectedScenarioId) {
+        if (project.scenarioTabs.none { it.first == selectedScenarioId }) {
+            selectedScenarioId = project.scenarioTabs.firstOrNull()?.first ?: "default"
+        }
+    }
     val scenarioCells = project.cells.filter { it.scenarioId == selectedScenarioId }
     val rowLabels = scenarioCells.map { it.yLabel }.distinct()
     val columnLabels = scenarioCells.map { it.xLabel }.distinct()
@@ -462,37 +484,44 @@ private fun ExperimentProjectScreen(
         }
 
         SectionCard(title = "实验网格", subtitle = "点击任意格子，直接进入这组参数的实验记录。") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                rowLabels.forEach { rowLabel ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        columnLabels.forEach { columnLabel ->
-                            val cell = scenarioCells.firstOrNull { it.xLabel == columnLabel && it.yLabel == rowLabel } ?: return@forEach
-                            val run = project.runs.lastOrNull { it.cellId == cell.id }
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = MaterialTheme.shapes.large,
-                                onClick = { onOpenCell(cell.id) },
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+            if (scenarioCells.isEmpty()) {
+                EmptyStateCard(
+                    title = "当前场景没有网格",
+                    subtitle = "请切换到其他场景，或返回检查变量水平是否有效。",
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    rowLabels.forEach { rowLabel ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            columnLabels.forEach { columnLabel ->
+                                val cell = scenarioCells.firstOrNull { it.xLabel == columnLabel && it.yLabel == rowLabel } ?: return@forEach
+                                val run = project.runs.lastOrNull { it.cellId == cell.id }
+                                Surface(
+                                    modifier = Modifier.widthIn(min = 168.dp, max = 236.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = MaterialTheme.shapes.large,
+                                    onClick = { onOpenCell(cell.id) },
                                 ) {
-                                    Text(cell.title, style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        text = "${columnLabel} / ${rowLabel}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        text = run?.let { "${it.score ?: "--"}/5${if (it.isOffPlan) " · 已偏离" else ""}" } ?: "点击开始",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(cell.title, style = MaterialTheme.typography.titleSmall)
+                                        Text(
+                                            text = "${columnLabel} / ${rowLabel}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            text = run?.let { "${it.score ?: "--"}/5${if (it.isOffPlan) " · 已偏离" else ""}" } ?: "点击开始",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -578,9 +607,7 @@ private fun <T> parseNameLevels(
     builder: (Int, String, T) -> ExperimentVariableLevel,
 ): List<ExperimentVariableLevel>? {
     if (raw.isBlank()) return null
-    return raw.split(",")
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
+    return splitLevelTokens(raw)
         .mapIndexedNotNull { index, name ->
             source[name]?.let { builder(index, name, it) }
         }
@@ -592,9 +619,7 @@ private fun parseNumericLevels(
     prefix: String,
 ): List<ExperimentVariableLevel> {
     if (raw.isBlank()) return emptyList()
-    return raw.split(",")
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
+    return splitLevelTokens(raw)
         .mapNotNull { it.toDoubleOrNull()?.let { value -> it to value } }
         .mapIndexed { index, (label, value) ->
             ExperimentVariableLevel(
@@ -603,4 +628,11 @@ private fun parseNumericLevels(
                 numericValue = value,
             )
         }
+}
+
+private fun splitLevelTokens(raw: String): List<String> {
+    return raw
+        .split(Regex("[,，;；\\n]+"))
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
 }
